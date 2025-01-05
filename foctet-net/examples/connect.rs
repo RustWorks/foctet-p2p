@@ -22,6 +22,12 @@ struct Args {
     /// Insecure mode to skip certificate verification.
     #[arg(short, long, help = "Insecure mode to skip certificate verification.")]
     insecure: bool,
+    /// Include loopback address in the list of target socket addresses.
+    #[arg(
+        long = "loopback",
+        help = "Server Node address to connect to."
+    )]
+    include_loopback: bool,
 }
 
 #[tokio::main]
@@ -52,8 +58,8 @@ async fn main() -> Result<()> {
         .with_node_addr(node_addr)
         .with_insecure(args.insecure)
         .with_server_addr(dummy_server_addr)
-        .with_include_loopback(true)
-        .build()
+        .with_include_loopback(args.include_loopback)
+        .build_client()
         .await?;
 
     // Connect to the server

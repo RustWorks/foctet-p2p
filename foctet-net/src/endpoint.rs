@@ -161,6 +161,24 @@ impl EndpointBuilder {
             quic_connections: Mutex::new(HashMap::new()),
         })
     }
+    /// Build the `Endpoint` for client.
+    ///
+    /// This initializes the underlying `QuicSocket` and `TcpSocket` based on the provided configuration.
+    pub async fn build_client(self) -> Result<Endpoint> {
+        tracing::info!("Building Endpoint...");
+        let quic_socket = QuicSocket::new_client(self.node_addr.node_id.clone(), self.config.clone())?;
+        let tcp_socket = TcpSocket::new(self.node_addr.node_id.clone(), self.config.clone())?;
+        let relay_client = RelayClient::new(self.node_addr.clone(),self.config.clone())?;
+        Ok(Endpoint {
+            node_addr: self.node_addr,
+            config: self.config,
+            quic_socket,
+            tcp_socket,
+            cancellation_token: CancellationToken::new(),
+            relay_client: relay_client,
+            quic_connections: Mutex::new(HashMap::new()),
+        })
+    }
 }
 
 #[derive(Debug)]
