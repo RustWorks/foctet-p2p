@@ -67,7 +67,7 @@ async fn main() -> Result<()> {
         .with_insecure(args.insecure)
         .with_server_addr(dummy_server_addr)
         .with_include_loopback(true)
-        .build()
+        .build_client()
         .await?;
 
     // Connect to the server
