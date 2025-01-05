@@ -1,0 +1,22 @@
+[package]
+name = "foctet-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Command-line interface for the Foctet protocol, providing tools for P2P communication and file transfer."
+
+[[bin]]
+name = "foctet"
+path = "src/main.rs"
+
+[dependencies]
+foctet = { path = "../foctet" }
+anyhow = { version = "1" }
+serde = { version = "1.0", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.5", features = ["cargo"] }
+indicatif = "0.16"
+inquire = "0.6"
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = "0.3.0"
