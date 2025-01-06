@@ -4,6 +4,7 @@ use clap::Parser;
 use anyhow::Result;
 use foctet_core::frame::{Frame, FrameType, Payload};
 use foctet_core::node::{NodeAddr, NodeId};
+use foctet_net::config::TransportProtocol;
 use foctet_net::{connection::FoctetStream, endpoint::Endpoint};
 use tokio::sync::mpsc;
 use tracing::Level;
@@ -28,6 +29,14 @@ struct Args {
         help = "Server Node address to connect to."
     )]
     include_loopback: bool,
+    /// Transport protocol to use. Default is both QUIC and TCP.
+    #[arg(
+        short = 'p',
+        long = "protocol",
+        help = "Transport protocol to use. Default is both QUIC and TCP.",
+        default_value = "both"
+    )]
+    protocol: String,
 }
 
 #[tokio::main]
@@ -55,6 +64,7 @@ async fn main() -> Result<()> {
     
     // Create a new endpoint
     let mut endpoint = Endpoint::builder()
+        .with_protocol(TransportProtocol::from_str(&args.protocol))
         .with_node_addr(node_addr)
         .with_insecure(args.insecure)
         .with_server_addr(dummy_server_addr)

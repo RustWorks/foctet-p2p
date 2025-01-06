@@ -6,6 +6,7 @@ use anyhow::Result;
 use foctet_core::content::TransferTicket;
 use foctet_core::frame::{Frame, FrameType, Payload};
 use foctet_core::node::{NodeAddr, NodeId};
+use foctet_net::config::TransportProtocol;
 use foctet_net::{connection::FoctetStream, endpoint::Endpoint};
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
@@ -33,6 +34,14 @@ struct Args {
         required = true
     )]
     save_path: PathBuf,
+    /// Transport protocol to use. Default is both QUIC and TCP.
+    #[arg(
+        short = 'p',
+        long = "protocol",
+        help = "Transport protocol to use. Default is both QUIC and TCP.",
+        default_value = "both"
+    )]
+    protocol: String,
 }
 
 #[tokio::main]
@@ -63,6 +72,7 @@ async fn main() -> Result<()> {
     
     // Create a new endpoint
     let mut endpoint = Endpoint::builder()
+        .with_protocol(TransportProtocol::from_str(&args.protocol))
         .with_node_addr(node_addr)
         .with_insecure(args.insecure)
         .with_server_addr(dummy_server_addr)
@@ -142,6 +152,10 @@ async fn main() -> Result<()> {
             tracing::info!("File saved to: {:?}", save_path);
             let elapsed = start_time.elapsed();
             tracing::info!("Elapsed time: {:?}", elapsed);
+            // Calculate the Mbps
+            let elapsed_secs = elapsed.as_secs_f64();
+            let mbps = (metadata.size as f64 / 1_000_000.0) / elapsed_secs;
+            tracing::info!("Speed: {:.2} Mbps", mbps);
         }
         Err(e) => {
             tracing::error!("Failed to receive file content: {:?}", e);

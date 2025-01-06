@@ -200,7 +200,7 @@ async fn handle_stream(stream: &mut NetworkStream) {
                             );
                             break;
                         };
-
+                        let file_size: usize = matadata.size;
                         // 2. Send the file metadata
                         let metadata_frame: Frame = Frame::builder()
                             .with_fin(true)
@@ -247,6 +247,10 @@ async fn handle_stream(stream: &mut NetworkStream) {
                                 tracing::info!("{} File sent.", stream.stream_id());
                                 let elapsed = start_time.elapsed();
                                 tracing::info!("Elapsed time: {:?}", elapsed);
+                                // Calculate the Mbps
+                                let elapsed_secs = elapsed.as_secs_f64();
+                                let mbps = (file_size as f64 / 1_000_000.0) / elapsed_secs;
+                                tracing::info!("Speed: {:.2} Mbps", mbps);
                             }
                             Err(e) => {
                                 tracing::error!(
