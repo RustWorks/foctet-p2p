@@ -98,6 +98,8 @@ async fn main() -> Result<()> {
         .with_cert_path_option(args.cert_path)
         .with_key_path_option(args.key_path)
         .with_insecure(args.insecure)
+        .with_max_read_buffer_size()
+        .with_max_write_buffer_size()
         .build().await?;
 
     tracing::info!("Server listening on {}", args.server_addr);

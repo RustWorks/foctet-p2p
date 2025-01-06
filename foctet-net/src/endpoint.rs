@@ -143,6 +143,47 @@ impl EndpointBuilder {
         self
     }
 
+    /// Sets a custom buffer size for sending data using builder pattern.
+    pub fn with_write_buffer_size(mut self, size: usize) -> Result<Self> {
+        self.config = self.config.with_write_buffer_size(size)?;
+        Ok(self)
+    }
+    /// Sets a custom buffer size for receiving data using builder pattern.
+    pub fn with_read_buffer_size(mut self, size: usize) -> Result<Self> {
+        self.config = self.config.with_read_buffer_size(size)?;
+        Ok(self)
+    }
+    /// Sets the write buffer size to the minimum value using builder pattern.
+    pub fn with_min_write_buffer_size(mut self) -> Self {
+        self.config = self.config.with_min_write_buffer_size();
+        self
+    }
+    /// Sets the read buffer size to the minimum value using builder pattern.
+    pub fn with_min_read_buffer_size(mut self) -> Self {
+        self.config = self.config.with_min_read_buffer_size();
+        self
+    }
+    /// Sets the write buffer size to the default value using builder pattern.
+    pub fn with_default_write_buffer_size(mut self) -> Self {
+        self.config = self.config.with_default_write_buffer_size();
+        self
+    }
+    /// Sets the read buffer size to the default value using builder pattern.
+    pub fn with_default_read_buffer_size(mut self) -> Self {
+        self.config = self.config.with_default_read_buffer_size();
+        self
+    }
+    /// Sets the write buffer size to the maximum value using builder pattern.
+    pub fn with_max_write_buffer_size(mut self) -> Self {
+        self.config = self.config.with_max_write_buffer_size();
+        self
+    }
+    /// Sets the read buffer size to the maximum value using builder pattern.
+    pub fn with_max_read_buffer_size(mut self) -> Self {
+        self.config = self.config.with_max_read_buffer_size();
+        self
+    }
+
     /// Build the `Endpoint`.
     ///
     /// This initializes the underlying `QuicSocket` and `TcpSocket` based on the provided configuration.

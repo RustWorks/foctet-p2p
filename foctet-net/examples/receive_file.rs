@@ -42,6 +42,12 @@ struct Args {
         default_value = "both"
     )]
     protocol: String,
+    /// Include loopback address in the list of target socket addresses.
+    #[arg(
+        long = "loopback",
+        help = "Include loopback address in the list of target socket addresses."
+    )]
+    include_loopback: bool,
 }
 
 #[tokio::main]
@@ -76,7 +82,9 @@ async fn main() -> Result<()> {
         .with_node_addr(node_addr)
         .with_insecure(args.insecure)
         .with_server_addr(dummy_server_addr)
-        .with_include_loopback(true)
+        .with_include_loopback(args.include_loopback)
+        .with_max_read_buffer_size()
+        .with_max_write_buffer_size()
         .build_client()
         .await?;
 
