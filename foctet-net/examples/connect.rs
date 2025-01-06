@@ -26,7 +26,7 @@ struct Args {
     /// Include loopback address in the list of target socket addresses.
     #[arg(
         long = "loopback",
-        help = "Server Node address to connect to."
+        help = "Include loopback address in the list of target socket addresses."
     )]
     include_loopback: bool,
     /// Transport protocol to use. Default is both QUIC and TCP.
