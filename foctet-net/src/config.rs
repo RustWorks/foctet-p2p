@@ -25,6 +25,23 @@ pub enum TransportProtocol {
     Tcp,
 }
 
+impl Default for TransportProtocol {
+    fn default() -> Self {
+        TransportProtocol::Both
+    }
+}
+
+impl TransportProtocol {
+    /// Converts a string to a transport protocol.
+    pub fn from_str(protocol: &str) -> Self {
+        match protocol.to_lowercase().as_str() {
+            "quic" => TransportProtocol::Quic,
+            "tcp" => TransportProtocol::Tcp,
+            _ => TransportProtocol::Both,
+        }
+    }
+}
+
 /// The configuration for the socket.
 #[derive(Debug, Clone)]
 pub struct EndpointConfig {
