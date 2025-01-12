@@ -123,6 +123,41 @@ impl FoctetSendStream for QuicSendStream {
         Ok(operation_id)
     }
 
+    async fn send_file_raw_bytes(&mut self, file_path: &std::path::Path) -> Result<()> {
+        let mut file = tokio::fs::File::open(file_path).await?;
+        let send_stream = self.framed_writer.get_mut();
+        let mut buffer = vec![0u8; self.send_buffer_size];
+    
+        loop {
+            let n = file.read(&mut buffer).await?;
+            if n == 0 {
+                break;
+            }
+            send_stream.write(&buffer[..n]).await?;
+        }
+        send_stream.flush().await?;
+        send_stream.finish()?;
+        Ok(())
+    }
+    async fn send_file_framed_bytes(&mut self, file_path: &std::path::Path) -> Result<()> {
+        let mut file = tokio::fs::File::open(file_path).await?;
+        let mut buffer = vec![0u8; self.send_buffer_size];
+    
+        loop {
+            let n = file.read(&mut buffer).await?;
+            if n == 0 {
+                break;
+            }
+            self.framed_writer.send(bytes::Bytes::copy_from_slice(&buffer[..n])).await?;
+        }
+
+        // Send an empty byte array to indicate the end of the file
+        self.framed_writer.send(bytes::Bytes::new()).await?;
+    
+        self.framed_writer.flush().await?;
+        Ok(())
+    }
+
     async fn close(&mut self) -> Result<()> {
         self.framed_writer.get_mut().finish()?;
         self.framed_writer.close().await?;
@@ -140,6 +175,14 @@ impl FoctetSendStream for QuicSendStream {
 
     fn remote_address(&self) -> SocketAddr {
         self.remote_address
+    }
+
+    fn write_buffer_size(&self) -> usize {
+        self.send_buffer_size
+    }
+
+    fn set_write_buffer_size(&mut self, size: usize) {
+        self.send_buffer_size = size;
     }
 }
 
@@ -269,6 +312,59 @@ impl FoctetRecvStream for QuicRecvStream {
         file.flush().await?;
         Ok(total_bytes)
     }
+    async fn receive_file_raw_bytes(&mut self, file_path: &std::path::Path) -> Result<u64> {
+        let mut total_bytes: u64 = 0;
+        let mut file = tokio::fs::File::create(file_path).await?;
+        let recv_stream = self.framed_reader.get_mut();
+        let mut buffer = vec![0u8; self.receive_buffer_size];
+        loop {
+            match recv_stream.read(&mut buffer).await {
+                Ok(n) => {
+                    match n {
+                        Some(n) => {
+                            if n == 0 {
+                                break;
+                            }
+                            file.write_all(&buffer[..n]).await?;
+                            total_bytes += n as u64;
+                        }
+                        None => {
+                            break;
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Error reading from stream: {:?}", e);
+                    break;
+                }
+            }
+        }
+        file.flush().await?;
+        Ok(total_bytes)
+    }
+    async fn receive_file_framed_bytes(&mut self, file_path: &std::path::Path) -> Result<u64> {
+        let mut total_bytes: u64 = 0;
+        let mut file = tokio::fs::File::create(file_path).await?;
+    
+        while let Some(chunk) = self.framed_reader.next().await {
+            match chunk {
+                Ok(bytes) => {
+                    if bytes.is_empty() {
+                        break;
+                    }
+                    file.write_all(&bytes).await?;
+                    total_bytes += bytes.len() as u64;
+                }
+                Err(e) => {
+                    tracing::error!("Error reading from stream: {:?}", e);
+                    break;
+                }
+            }
+        }
+        file.flush().await?;
+        Ok(total_bytes)
+    }
+
     async fn close(&mut self) -> Result<()> {
         self.framed_reader.get_mut().stop(VarInt::from_u32(0))?;
         self.is_closed = true;
@@ -285,6 +381,14 @@ impl FoctetRecvStream for QuicRecvStream {
 
     fn remote_address(&self) -> SocketAddr {
         self.remote_address
+    }
+
+    fn read_buffer_size(&self) -> usize {
+        self.receive_buffer_size
+    }
+
+    fn set_read_buffer_size(&mut self, size: usize) {
+        self.receive_buffer_size = size;
     }
 }
 
@@ -555,6 +659,93 @@ impl FoctetStream for QuicStream {
         Ok(total_bytes)
     }
 
+    async fn send_file_raw_bytes(&mut self, file_path: &std::path::Path) -> Result<()> {
+        let mut file = tokio::fs::File::open(file_path).await?;
+        let send_stream = self.framed_writer.get_mut();
+        let mut buffer = vec![0u8; self.send_buffer_size];
+    
+        loop {
+            let n = file.read(&mut buffer).await?;
+            if n == 0 {
+                break;
+            }
+            send_stream.write(&buffer[..n]).await?;
+        }
+        send_stream.flush().await?;
+        send_stream.finish()?;
+        Ok(())
+    }
+    async fn send_file_framed_bytes(&mut self, file_path: &std::path::Path) -> Result<()> {
+        let mut file = tokio::fs::File::open(file_path).await?;
+        let mut buffer = vec![0u8; self.send_buffer_size];
+    
+        loop {
+            let n = file.read(&mut buffer).await?;
+            if n == 0 {
+                break;
+            }
+            self.framed_writer.send(bytes::Bytes::copy_from_slice(&buffer[..n])).await?;
+        }
+
+        // Send an empty byte array to indicate the end of the file
+        self.framed_writer.send(bytes::Bytes::new()).await?;
+    
+        self.framed_writer.flush().await?;
+        Ok(())
+    }
+    async fn receive_file_raw_bytes(&mut self, file_path: &std::path::Path) -> Result<u64> {
+        let mut total_bytes: u64 = 0;
+        let mut file = tokio::fs::File::create(file_path).await?;
+        let recv_stream = self.framed_reader.get_mut();
+        let mut buffer = vec![0u8; self.receive_buffer_size];
+        loop {
+            match recv_stream.read(&mut buffer).await {
+                Ok(n) => {
+                    match n {
+                        Some(n) => {
+                            if n == 0 {
+                                break;
+                            }
+                            file.write_all(&buffer[..n]).await?;
+                            total_bytes += n as u64;
+                        }
+                        None => {
+                            break;
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Error reading from stream: {:?}", e);
+                    break;
+                }
+            }
+        }
+        file.flush().await?;
+        Ok(total_bytes)
+    }
+    async fn receive_file_framed_bytes(&mut self, file_path: &std::path::Path) -> Result<u64> {
+        let mut total_bytes: u64 = 0;
+        let mut file = tokio::fs::File::create(file_path).await?;
+    
+        while let Some(chunk) = self.framed_reader.next().await {
+            match chunk {
+                Ok(bytes) => {
+                    if bytes.is_empty() {
+                        break;
+                    }
+                    file.write_all(&bytes).await?;
+                    total_bytes += bytes.len() as u64;
+                }
+                Err(e) => {
+                    tracing::error!("Error reading from stream: {:?}", e);
+                    break;
+                }
+            }
+        }
+        file.flush().await?;
+        Ok(total_bytes)
+    }
+
     async fn close(&mut self) -> Result<()> {
         self.framed_writer.flush().await?;
         self.framed_writer.get_mut().finish()?;
@@ -582,6 +773,22 @@ impl FoctetStream for QuicStream {
 
     fn transport_protocol(&self) -> TransportProtocol {
         TransportProtocol::Quic
+    }
+
+    fn write_buffer_size(&self) -> usize {
+        self.send_buffer_size
+    }
+
+    fn set_write_buffer_size(&mut self, size: usize) {
+        self.send_buffer_size = size;
+    }
+
+    fn read_buffer_size(&self) -> usize {
+        self.receive_buffer_size
+    }
+
+    fn set_read_buffer_size(&mut self, size: usize) {
+        self.receive_buffer_size = size;
     }
 
     fn split(self) -> (super::SendStream, super::RecvStream) {

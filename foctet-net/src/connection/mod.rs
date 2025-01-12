@@ -303,6 +303,18 @@ pub trait FoctetStream {
     /// Receive a file over the stream
     async fn receive_file(&mut self, file_path: &Path) -> Result<u64>;
 
+    /// Send a file over the stream in framed bytes
+    async fn send_file_framed_bytes(&mut self, file_path: &std::path::Path) -> Result<()>;
+
+    /// Receive a file over the stream in framed bytes
+    async fn receive_file_framed_bytes(&mut self, file_path: &std::path::Path) -> Result<u64>;
+
+    /// Send a file over the stream in raw bytes
+    async fn send_file_raw_bytes(&mut self, file_path: &Path) -> Result<()>;
+
+    /// Receive a file over the stream in raw bytes
+    async fn receive_file_raw_bytes(&mut self, file_path: &Path) -> Result<u64>;
+
     /// Gracefully closes the stream.
     async fn close(&mut self) -> Result<()>;
 
@@ -320,6 +332,18 @@ pub trait FoctetStream {
 
     /// Returns the transport protocol used by the connection.
     fn transport_protocol(&self) -> TransportProtocol;
+
+    /// Return write buffer size
+    fn write_buffer_size(&self) -> usize;
+
+    /// Sets the write buffer size.
+    fn set_write_buffer_size(&mut self, size: usize);
+
+    /// Return read buffer size
+    fn read_buffer_size(&self) -> usize;
+
+    /// Sets the read buffer size.
+    fn set_read_buffer_size(&mut self, size: usize);
 
     /// Splits the stream into send and receive streams.
     fn split(self) -> (SendStream, RecvStream);
@@ -352,6 +376,12 @@ pub trait FoctetSendStream {
     /// Send a file over the stream
     async fn send_file(&mut self, file_path: &Path) -> Result<OperationId>;
 
+    /// Send a file over the stream in framed bytes
+    async fn send_file_framed_bytes(&mut self, file_path: &std::path::Path) -> Result<()>;
+
+    /// Send a file over the stream in raw bytes
+    async fn send_file_raw_bytes(&mut self, file_path: &Path) -> Result<()>;
+
     /// Gracefully closes the stream.
     async fn close(&mut self) -> Result<()>;
 
@@ -363,6 +393,12 @@ pub trait FoctetSendStream {
 
     /// Returns the remote address of the connection.
     fn remote_address(&self) -> SocketAddr;
+
+    /// Return write buffer size
+    fn write_buffer_size(&self) -> usize;
+
+    /// Sets the write buffer size.
+    fn set_write_buffer_size(&mut self, size: usize);
 }
 
 #[allow(async_fn_in_trait)]
@@ -385,6 +421,12 @@ pub trait FoctetRecvStream {
     /// Receive a file over the stream
     async fn receive_file(&mut self, file_path: &Path) -> Result<u64>;
 
+    /// Receive a file over the stream in framed bytes
+    async fn receive_file_framed_bytes(&mut self, file_path: &std::path::Path) -> Result<u64>;
+
+    /// Receive a file over the stream in raw bytes
+    async fn receive_file_raw_bytes(&mut self, file_path: &Path) -> Result<u64>;
+
     /// Gracefully closes the stream.
     async fn close(&mut self) -> Result<()>;
 
@@ -396,6 +438,12 @@ pub trait FoctetRecvStream {
 
     /// Returns the remote address of the connection.
     fn remote_address(&self) -> SocketAddr;
+
+    /// Return read buffer size
+    fn read_buffer_size(&self) -> usize;
+
+    /// Sets the read buffer size.
+    fn set_read_buffer_size(&mut self, size: usize);
 }
 
 #[derive(Debug)]
@@ -461,6 +509,22 @@ impl FoctetSendStream for SendStream {
         }
     }
 
+    /// Send a file over the stream in framed bytes
+    async fn send_file_framed_bytes(&mut self, file_path: &std::path::Path) -> Result<()> {
+        match self {
+            SendStream::Quic(stream) => stream.send_file_framed_bytes(file_path).await,
+            SendStream::Tcp(stream) => stream.send_file_framed_bytes(file_path).await,
+        }
+    }
+
+    /// Send a file over the stream in raw bytes
+    async fn send_file_raw_bytes(&mut self, file_path: &Path) -> Result<()> {
+        match self {
+            SendStream::Quic(stream) => stream.send_file_raw_bytes(file_path).await,
+            SendStream::Tcp(stream) => stream.send_file_raw_bytes(file_path).await,
+        }
+    }
+
     /// Gracefully closes the stream.
     async fn close(&mut self) -> Result<()> {
         match self {
@@ -490,6 +554,22 @@ impl FoctetSendStream for SendStream {
         match self {
             SendStream::Quic(stream) => stream.remote_address(),
             SendStream::Tcp(stream) => stream.remote_address(),
+        }
+    }
+
+    /// Return write buffer size
+    fn write_buffer_size(&self) -> usize {
+        match self {
+            SendStream::Quic(stream) => stream.write_buffer_size(),
+            SendStream::Tcp(stream) => stream.write_buffer_size(),
+        }
+    }
+
+    /// Sets the write buffer size.
+    fn set_write_buffer_size(&mut self, size: usize) {
+        match self {
+            SendStream::Quic(stream) => stream.set_write_buffer_size(size),
+            SendStream::Tcp(stream) => stream.set_write_buffer_size(size),
         }
     }
 }
@@ -549,6 +629,22 @@ impl FoctetRecvStream for RecvStream {
         }
     }
 
+    /// Receive a file over the stream in framed bytes
+    async fn receive_file_framed_bytes(&mut self, file_path: &std::path::Path) -> Result<u64> {
+        match self {
+            RecvStream::Quic(stream) => stream.receive_file_framed_bytes(file_path).await,
+            RecvStream::Tcp(stream) => stream.receive_file_framed_bytes(file_path).await,
+        }
+    }
+
+    /// Receive a file over the stream in raw bytes
+    async fn receive_file_raw_bytes(&mut self, file_path: &Path) -> Result<u64> {
+        match self {
+            RecvStream::Quic(stream) => stream.receive_file_raw_bytes(file_path).await,
+            RecvStream::Tcp(stream) => stream.receive_file_raw_bytes(file_path).await,
+        }
+    }
+
     /// Gracefully closes the stream.
     async fn close(&mut self) -> Result<()> {
         match self {
@@ -578,6 +674,22 @@ impl FoctetRecvStream for RecvStream {
         match self {
             RecvStream::Quic(stream) => stream.remote_address(),
             RecvStream::Tcp(stream) => stream.remote_address(),
+        }
+    }
+
+    /// Return read buffer size
+    fn read_buffer_size(&self) -> usize {
+        match self {
+            RecvStream::Quic(stream) => stream.read_buffer_size(),
+            RecvStream::Tcp(stream) => stream.read_buffer_size(),
+        }
+    }
+
+    /// Sets the read buffer size.
+    fn set_read_buffer_size(&mut self, size: usize) {
+        match self {
+            RecvStream::Quic(stream) => stream.set_read_buffer_size(size),
+            RecvStream::Tcp(stream) => stream.set_read_buffer_size(size),
         }
     }
 
@@ -674,6 +786,34 @@ impl FoctetStream for NetworkStream {
         }
     }
 
+    async fn send_file_framed_bytes(&mut self, file_path: &std::path::Path) -> Result<()> {
+        match self {
+            NetworkStream::Quic(stream) => stream.send_file_framed_bytes(file_path).await,
+            NetworkStream::Tcp(stream) => stream.send_file_framed_bytes(file_path).await,
+        }
+    }
+
+    async fn receive_file_framed_bytes(&mut self, file_path: &std::path::Path) -> Result<u64> {
+        match self {
+            NetworkStream::Quic(stream) => stream.receive_file_framed_bytes(file_path).await,
+            NetworkStream::Tcp(stream) => stream.receive_file_framed_bytes(file_path).await,
+        }
+    }
+
+    async fn send_file_raw_bytes(&mut self, file_path: &Path) -> Result<()> {
+        match self {
+            NetworkStream::Quic(stream) => stream.send_file_raw_bytes(file_path).await,
+            NetworkStream::Tcp(stream) => stream.send_file_raw_bytes(file_path).await,
+        }
+    }
+
+    async fn receive_file_raw_bytes(&mut self, file_path: &Path) -> Result<u64> {
+        match self {
+            NetworkStream::Quic(stream) => stream.receive_file_raw_bytes(file_path).await,
+            NetworkStream::Tcp(stream) => stream.receive_file_raw_bytes(file_path).await,
+        }
+    }
+
     async fn close(&mut self) -> Result<()> {
         match self {
             NetworkStream::Quic(stream) => stream.close().await,
@@ -713,6 +853,34 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.transport_protocol(),
             NetworkStream::Tcp(stream) => stream.transport_protocol(),
+        }
+    }
+
+    fn write_buffer_size(&self) -> usize {
+        match self {
+            NetworkStream::Quic(stream) => stream.write_buffer_size(),
+            NetworkStream::Tcp(stream) => stream.write_buffer_size(),
+        }
+    }
+
+    fn set_write_buffer_size(&mut self, size: usize) {
+        match self {
+            NetworkStream::Quic(stream) => stream.set_write_buffer_size(size),
+            NetworkStream::Tcp(stream) => stream.set_write_buffer_size(size),
+        }
+    }
+
+    fn read_buffer_size(&self) -> usize {
+        match self {
+            NetworkStream::Quic(stream) => stream.read_buffer_size(),
+            NetworkStream::Tcp(stream) => stream.read_buffer_size(),
+        }
+    }
+
+    fn set_read_buffer_size(&mut self, size: usize) {
+        match self {
+            NetworkStream::Quic(stream) => stream.set_read_buffer_size(size),
+            NetworkStream::Tcp(stream) => stream.set_read_buffer_size(size),
         }
     }
 
