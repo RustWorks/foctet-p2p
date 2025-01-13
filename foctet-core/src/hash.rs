@@ -43,83 +43,98 @@ impl Blake3Hash {
     }
 }
 
-/// Calculates the hash for a byte array.
-/// If the size of the array exceeds the `CHUNK_THRESHOLD`,
-/// the data is processed in chunks.
-pub fn calculate_hash(data: &[u8]) -> Result<Blake3Hash> {
-    let hash = if data.len() > CHUNK_THRESHOLD {
-        calc_blake3_bytes_hash_chunk(data)?
-    } else {
-        calc_blake3_bytes_hash(data)?
-    };
-    Ok(Blake3Hash::from_blake3_hash(hash))
+/// The BLAKE3 hasher. It calculates the hash of a byte array or a file.
+pub struct Blake3Hasher {
+    buffer_size: usize,
+    mmap_threshold: u64,
 }
 
-/// Culculates the BLAKE3 hash of a file.
-/// If the file size exceeds the `MMAP_THRESHOLD`,
-/// reading the contents of a file using memory mapping
-/// is faster than reading the file using a file reader.
-/// If the number of available threads is greater than 1,
-/// the hash is calculated using multiple threads.
-pub fn calculate_file_hash(file_path: &Path) -> Result<Blake3Hash> {
-    let file_size = fs::metadata(file_path)?.len();
-
-    let hash = if file_size > MMAP_THRESHOLD {
-        let parallelism = thread::available_parallelism()?.get();
-        if parallelism > 1 {
-            calc_blake3_file_hash_mmap_multithread(file_path)?
-        } else {
-            calc_blake3_file_hash_mmap(file_path)?
+impl Blake3Hasher {
+    /// Creates a new `Blake3Hasher` with default settings.
+    pub fn new() -> Self {
+        Self {
+            buffer_size: DEFAULT_HASH_BUFFER_SIZE,
+            mmap_threshold: MMAP_THRESHOLD,
         }
-    } else {
-        calc_blake3_file_hash(file_path)?
-    };
-
-    Ok(Blake3Hash::from_blake3_hash(hash))
-}
-
-/// Culculates the BLAKE3 hash of a byte array.
-fn calc_blake3_bytes_hash(data: &[u8]) -> io::Result<Hash> {
-    let mut hasher = Hasher::new();
-    // Hash the data
-    hasher.update(data);
-    Ok(hasher.finalize())
-}
-
-/// Culculates the BLAKE3 hash of a byte array in chunks.
-fn calc_blake3_bytes_hash_chunk(data: &[u8]) -> io::Result<Hash> {
-    let mut hasher = Hasher::new();
-    let mut offset = 0;
-
-    // Hash the data in chunks
-    while offset < data.len() {
-        let end = std::cmp::min(offset + DEFAULT_HASH_BUFFER_SIZE, data.len());
-        hasher.update(&data[offset..end]);
-        offset = end;
     }
-    Ok(hasher.finalize())
-}
 
-/// Calculates the BLAKE3 hash of a file using file reader.
-fn calc_blake3_file_hash(file_path: &Path) -> io::Result<Hash> {
-    let file = File::open(file_path)?;
-    let mut hasher = Hasher::new();
-    hasher.update_reader(file)?;
-    Ok(hasher.finalize())
-}
+    /// Creates a new `Blake3Hasher` with custom settings.
+    pub fn with_settings(buffer_size: usize, mmap_threshold: u64) -> Self {
+        Self {
+            buffer_size,
+            mmap_threshold,
+        }
+    }
 
-/// Calculates the BLAKE3 hash of a file using memory-mapped file reader.
-fn calc_blake3_file_hash_mmap(file_path: &Path) -> io::Result<Hash> {
-    let mut hasher = Hasher::new();
-    hasher.update_mmap(file_path)?;
-    Ok(hasher.finalize())
-}
+    /// Calculates the hash for a byte array.
+    pub fn calculate_hash(&self, data: &[u8]) -> Result<Blake3Hash> {
+        let hash = if data.len() > CHUNK_THRESHOLD {
+            self.calc_bytes_hash_chunk(data)?
+        } else {
+            self.calc_bytes_hash(data)?
+        };
+        Ok(Blake3Hash::from_blake3_hash(hash))
+    }
 
-/// Calculates the BLAKE3 hash of a file using memory-mapped file reader with multiple threads.
-fn calc_blake3_file_hash_mmap_multithread(file_path: &Path) -> io::Result<Hash> {
-    let mut hasher = Hasher::new();
-    hasher.update_mmap_rayon(file_path)?;
-    Ok(hasher.finalize())
+    /// Calculates the BLAKE3 hash of a file.
+    pub fn calculate_file_hash(&self, file_path: &Path) -> Result<Blake3Hash> {
+        let file_size = fs::metadata(file_path)?.len();
+
+        let hash = if file_size > self.mmap_threshold {
+            let parallelism = thread::available_parallelism()?.get();
+            if parallelism > 1 {
+                self.calc_file_hash_mmap_multithread(file_path)?
+            } else {
+                self.calc_file_hash_mmap(file_path)?
+            }
+        } else {
+            self.calc_file_hash(file_path)?
+        };
+
+        Ok(Blake3Hash::from_blake3_hash(hash))
+    }
+
+    /// Calculates the hash of a byte array.
+    fn calc_bytes_hash(&self, data: &[u8]) -> io::Result<Hash> {
+        let mut hasher = Hasher::new();
+        hasher.update(data);
+        Ok(hasher.finalize())
+    }
+
+    /// Calculates the hash of a byte array in chunks.
+    fn calc_bytes_hash_chunk(&self, data: &[u8]) -> io::Result<Hash> {
+        let mut hasher = Hasher::new();
+        let mut offset = 0;
+
+        while offset < data.len() {
+            let end = std::cmp::min(offset + self.buffer_size, data.len());
+            hasher.update(&data[offset..end]);
+            offset = end;
+        }
+        Ok(hasher.finalize())
+    }
+
+    /// Calculates the hash of a file using a file reader.
+    fn calc_file_hash(&self, file_path: &Path) -> io::Result<Hash> {
+        let file = File::open(file_path)?;
+        let mut hasher = Hasher::new();
+        hasher.update_reader(file)?;
+        Ok(hasher.finalize())
+    }
+
+    /// Calculates the hash of a file using memory-mapped file reader.
+    fn calc_file_hash_mmap(&self, file_path: &Path) -> io::Result<Hash> {
+        let mut hasher = Hasher::new();
+        hasher.update_mmap(file_path)?;
+        Ok(hasher.finalize())
+    }
+
+    /// Calculates the hash of a file using memory-mapped file reader with multiple threads.
+    fn calc_file_hash_mmap_multithread(&self, file_path: &Path) -> io::Result<Hash> {
+        let mut hasher = Hasher::new();
+        hasher.update_mmap_rayon(file_path)?;
+        Ok(hasher.finalize())
+    }
 }
 
 #[cfg(test)]
@@ -130,7 +145,7 @@ mod tests {
     const TEST_FILE_SMALL: &str = "test_small.txt";
     const TEST_FILE_LARGE: &str = "test_large.txt";
     // 128MB
-    const LARGE_FILE_SIZE: usize = 128 * 1024 * 1024; 
+    const LARGE_FILE_SIZE: usize = 128 * 1024 * 1024;
 
     fn create_test_file(file_name: &str, size: usize) -> PathBuf {
         let file_path = PathBuf::from(file_name);
@@ -142,63 +157,71 @@ mod tests {
 
     #[test]
     fn test_calculate_hash_small_data() {
+        let hasher = Blake3Hasher::new();
         let data = b"hello world";
-        let hash = calculate_hash(data).unwrap();
+        let hash = hasher.calculate_hash(data).unwrap();
         assert_eq!(hash.len(), DEFAULT_HASH_LEN);
     }
 
     #[test]
     fn test_calculate_hash_large_data() {
+        let hasher = Blake3Hasher::new();
         let data = vec![b'a'; CHUNK_THRESHOLD + 1];
-        let hash = calculate_hash(&data).unwrap();
+        let hash = hasher.calculate_hash(&data).unwrap();
         assert_eq!(hash.len(), DEFAULT_HASH_LEN);
     }
 
     #[test]
     fn test_calculate_file_hash_small_file() {
+        let hasher = Blake3Hasher::new();
         let data = b"hello world";
         let file_path = create_test_file(TEST_FILE_SMALL, data.len());
-        let hash = calculate_file_hash(&file_path).unwrap();
+        let hash = hasher.calculate_file_hash(&file_path).unwrap();
         assert_eq!(hash.len(), DEFAULT_HASH_LEN);
         std::fs::remove_file(file_path).unwrap();
     }
 
     #[test]
     fn test_calculate_file_hash_large_file() {
+        let hasher = Blake3Hasher::new();
         let file_path = create_test_file(TEST_FILE_LARGE, LARGE_FILE_SIZE);
-        let hash = calculate_file_hash(&file_path).unwrap();
+        let hash = hasher.calculate_file_hash(&file_path).unwrap();
         assert_eq!(hash.len(), DEFAULT_HASH_LEN);
         std::fs::remove_file(file_path).unwrap();
     }
 
     #[test]
     fn test_calculate_file_hash_nonexistent() {
+        let hasher = Blake3Hasher::new();
         let file_path = Path::new("nonexistent.txt");
-        let result = calculate_file_hash(file_path);
+        let result = hasher.calculate_file_hash(file_path);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_calculate_hash_empty_data() {
+        let hasher = Blake3Hasher::new();
         let data: &[u8] = &[];
-        let hash = calculate_hash(data).unwrap();
+        let hash = hasher.calculate_hash(data).unwrap();
         assert_eq!(hash.len(), DEFAULT_HASH_LEN);
     }
 
     #[test]
     fn test_calculate_file_hash_empty_file() {
+        let hasher = Blake3Hasher::new();
         let file_path = create_test_file(TEST_FILE_SMALL, 0);
-        let hash = calculate_file_hash(&file_path).unwrap();
+        let hash = hasher.calculate_file_hash(&file_path).unwrap();
         assert_eq!(hash.len(), DEFAULT_HASH_LEN);
         std::fs::remove_file(file_path).unwrap();
     }
 
     #[test]
     fn test_calculate_file_hash_parallelism() {
+        let hasher = Blake3Hasher::new();
         let file_path = create_test_file(TEST_FILE_LARGE, LARGE_FILE_SIZE);
         let threads = thread::available_parallelism().unwrap();
         if threads.get() > 1 {
-            let hash = calculate_file_hash(&file_path).unwrap();
+            let hash = hasher.calculate_file_hash(&file_path).unwrap();
             assert_eq!(hash.len(), DEFAULT_HASH_LEN);
         }
         std::fs::remove_file(file_path).unwrap();
@@ -206,18 +229,36 @@ mod tests {
 
     #[test]
     fn test_hash_consistency() {
+        let hasher = Blake3Hasher::new();
         let data = b"consistent data";
-        let hash1 = calculate_hash(data).unwrap();
-        let hash2 = calculate_hash(data).unwrap();
+        let hash1 = hasher.calculate_hash(data).unwrap();
+        let hash2 = hasher.calculate_hash(data).unwrap();
         assert_eq!(hash1.to_hex(), hash2.to_hex());
     }
 
     #[test]
     fn test_hash_different_inputs() {
+        let hasher = Blake3Hasher::new();
         let data1 = b"data1";
         let data2 = b"data2";
-        let hash1 = calculate_hash(data1).unwrap();
-        let hash2 = calculate_hash(data2).unwrap();
+        let hash1 = hasher.calculate_hash(data1).unwrap();
+        let hash2 = hasher.calculate_hash(data2).unwrap();
         assert_ne!(hash1.to_hex(), hash2.to_hex());
+    }
+
+    #[test]
+    fn test_custom_settings() {
+        let buffer_size = 64 * 1024;
+        let mmap_threshold = 128 * 1024 * 1024;
+        let hasher = Blake3Hasher::with_settings(buffer_size, mmap_threshold);
+
+        let data = vec![b'a'; buffer_size * 2];
+        let hash = hasher.calculate_hash(&data).unwrap();
+        assert_eq!(hash.len(), DEFAULT_HASH_LEN);
+
+        let file_path = create_test_file(TEST_FILE_LARGE, LARGE_FILE_SIZE);
+        let hash = hasher.calculate_file_hash(&file_path).unwrap();
+        assert_eq!(hash.len(), DEFAULT_HASH_LEN);
+        std::fs::remove_file(file_path).unwrap();
     }
 }

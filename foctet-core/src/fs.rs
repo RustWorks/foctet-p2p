@@ -1,5 +1,6 @@
 use crate::default::DEFAULT_CONFIG_DIR;
 use crate::frame::FileMetadata;
+use crate::hash::Blake3Hasher;
 use crate::time::UnixTimestamp;
 use anyhow::anyhow;
 use anyhow::Result;
@@ -38,7 +39,8 @@ pub fn get_file_metadata(path: &Path, is_compressed_dir: bool) -> Result<FileMet
         .to_str()
         .unwrap_or_default()
         .to_string();
-    let hash = crate::hash::calculate_file_hash(path)?;
+    let hasher: Blake3Hasher = Blake3Hasher::new();
+    let hash = hasher.calculate_file_hash(path)?;
 
     // Timestamps
     let created: UnixTimestamp = UnixTimestamp::from_system_time(file_metadata.created()?);

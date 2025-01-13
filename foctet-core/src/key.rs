@@ -16,6 +16,7 @@ use ttl_cache::TtlCache;
 use uuid::Uuid;
 
 use crate::hash::Blake3Hash;
+use crate::hash::Blake3Hasher;
 
 pub const UUID_V4_BYTES_LEN: usize = 16;
 
@@ -103,7 +104,8 @@ impl NodePublicKey {
 
     /// Returns the BLAKE3 hash of the public key
     pub fn hash(&self) -> Result<Blake3Hash> {
-        crate::hash::calculate_hash(&self.public_key)
+        let hasher: Blake3Hasher = Blake3Hasher::new();
+        hasher.calculate_hash(&self.public_key)
     }
 
     /// Returns the BLAKE3 hash of the public key, as a hexadecimal string.
@@ -295,10 +297,11 @@ mod tests {
         let key_pair = generate_key_pair().unwrap();
         let public_key_bytes = key_pair.public_key().as_ref();
         let public_key = NodePublicKey::from_bytes(public_key_bytes);
+        let hasher: Blake3Hasher = Blake3Hasher::new();
         assert_eq!(public_key.as_bytes(), public_key.public_key.as_ref());
         assert_eq!(
             public_key.hash().unwrap(),
-            crate::hash::calculate_hash(public_key.as_bytes()).unwrap()
+            hasher.calculate_hash(public_key.as_bytes()).unwrap()
         );
         public_key.cache();
         let cached_public_key = NodePublicKey::from_cache(public_key.public_key).unwrap();
