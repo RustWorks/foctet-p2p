@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use bytes::BytesMut;
-use foctet::{core::{error::StreamError, frame::{Frame, FrameType, HandshakeData, OperationId, Payload}, node::{ConnectionId, NodeId, NodePair}}, net::connection::{FoctetRecvStream, FoctetSendStream, FoctetStream, NetworkStream, RecvStream, SendStream}};
+use foctet::core::{error::StreamError, frame::{Frame, FrameType, HandshakeData, OperationId, Payload}, node::{ConnectionId, NodeId, NodePair}};
+use foctet::net::transport::stream::{FoctetRecvStream, FoctetSendStream, FoctetStream, NetworkStream, RecvStream, SendStream};
 use tokio::sync::mpsc;
 use tokio_util::{sync::CancellationToken, task::AbortOnDropHandle};
 use anyhow::Result;

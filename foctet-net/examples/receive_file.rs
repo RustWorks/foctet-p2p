@@ -7,7 +7,7 @@ use foctet_core::content::TransferTicket;
 use foctet_core::frame::{Frame, FrameType, Payload};
 use foctet_core::node::{NodeAddr, NodeId};
 use foctet_net::config::TransportProtocol;
-use foctet_net::{connection::FoctetStream, endpoint::Endpoint};
+use foctet_net::{transport::stream::FoctetStream, endpoint::Endpoint};
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 

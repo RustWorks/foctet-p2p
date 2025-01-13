@@ -1,6 +1,7 @@
 use anyhow::Result;
 use foctet_core::node::{NodeAddr, NodeId, RelayAddr};
-use crate::{config::{EndpointConfig, TransportProtocol}, connection::{quic::QuicSocket, tcp::TcpSocket, FoctetStream, NetworkStream}};
+use crate::{config::{EndpointConfig, TransportProtocol}, transport::{quic::connection::QuicSocket, tcp::connection::TcpSocket}};
+use crate::transport::stream::{FoctetStream, NetworkStream};
 
 #[derive(Clone)]
 pub struct RelayClient {

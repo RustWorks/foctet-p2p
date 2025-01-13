@@ -1,4 +1,4 @@
-use foctet::{core::node::{NodeId, NodePair}, net::connection::NetworkStream};
+use foctet::{core::node::{NodeId, NodePair}, net::transport::stream::NetworkStream};
 use bytes::Bytes;
 
 #[derive(Debug)]

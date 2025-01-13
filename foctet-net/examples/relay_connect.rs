@@ -4,7 +4,7 @@ use clap::Parser;
 use anyhow::Result;
 use foctet_core::frame::{Frame, FrameType, Payload};
 use foctet_core::node::{NodeAddr, NodeId, RelayAddr};
-use foctet_net::{connection::FoctetStream, endpoint::Endpoint};
+use foctet_net::{transport::stream::FoctetStream, endpoint::Endpoint};
 use tokio::sync::mpsc;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;

@@ -5,7 +5,7 @@ use tracing_subscriber::FmtSubscriber;
 use clap::Parser;
 use anyhow::Result;
 
-use foctet_net::{config::TransportProtocol, connection::{FoctetStream, NetworkStream}, endpoint::Endpoint};
+use foctet_net::{config::TransportProtocol, transport::stream::{FoctetStream, NetworkStream}, endpoint::Endpoint};
 
 /// Command line arguments for the file sender.
 #[derive(Parser, Debug)]

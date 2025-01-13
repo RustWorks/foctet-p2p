@@ -5,12 +5,11 @@ use std::time::Duration;
 
 use crate::config::EndpointConfig;
 use crate::config::TransportProtocol;
-use crate::connection::quic::QuicConnection;
-use crate::connection::quic::QuicSocket;
-use crate::connection::tcp::TcpSocket;
-use crate::connection::tcp::TlsTcpStream;
-use crate::connection::FoctetStream;
-use crate::connection::NetworkStream;
+use crate::transport::quic::connection::{QuicConnection, QuicSocket};
+use crate::transport::tcp::connection::TcpSocket;
+use crate::transport::tcp::stream::TlsTcpStream;
+use crate::transport::stream::FoctetStream;
+use crate::transport::stream::NetworkStream;
 use crate::relay::client::RelayClient;
 use anyhow::Result;
 use anyhow::anyhow;

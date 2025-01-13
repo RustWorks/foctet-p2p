@@ -5,7 +5,7 @@ use tracing_subscriber::FmtSubscriber;
 use clap::Parser;
 use anyhow::Result;
 use tokio::sync::RwLock;
-use foctet_net::{config::TransportProtocol, connection::{FoctetStream, NetworkStream}, endpoint::Endpoint};
+use foctet_net::{config::TransportProtocol, transport::stream::{FoctetStream, NetworkStream}, endpoint::Endpoint};
 
 // Lazy static map to store file metadata
 static METADATA_STORE: OnceLock<RwLock<HashMap<ContentId, FileMetadata>>> = OnceLock::new();

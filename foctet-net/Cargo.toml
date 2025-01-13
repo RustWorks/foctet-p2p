@@ -24,7 +24,8 @@ rcgen = "0.13"
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring"]} 
 quinn = "0.11"
 quinn-proto = "0.11"
-#tokio-tungstenite = { version = "0.23", features = ["__rustls-tls", "rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
+wtransport = { version = "0.5.0", optional = true } 
+tokio-tungstenite = { version = "0.26", features = ["__rustls-tls", "rustls-tls-native-roots", "rustls-tls-webpki-roots"], optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "signal", "macros"] }
@@ -33,33 +34,33 @@ tracing = "0.1"
 tracing-subscriber = "0.3.0"
 
 [[example]]
-name = "quic_connect"
-path = "examples/quic_connect.rs"
+name = "connect"
+path = "examples/connect.rs"
 
 [[example]]
-name = "quic_listen"
-path = "examples/quic_listen.rs"
+name = "listen"
+path = "examples/listen.rs"
 
 [[example]]
-name = "quic_receive_file"
-path = "examples/quic_receive_file.rs"
+name = "receive_file"
+path = "examples/receive_file.rs"
 
 [[example]]
-name = "quic_send_file"
-path = "examples/quic_send_file.rs"
+name = "send_file"
+path = "examples/send_file.rs"
 
 [[example]]
-name = "tcp_connect"
-path = "examples/tcp_connect.rs"
+name = "receive_file_frame"
+path = "examples/receive_file_frame.rs"
 
 [[example]]
-name = "tcp_listen"
-path = "examples/tcp_listen.rs"
+name = "send_file_frame"
+path = "examples/send_file_frame.rs"
 
 [[example]]
-name = "tcp_receive_file"
-path = "examples/tcp_receive_file.rs"
+name = "receive_file_raw"
+path = "examples/receive_file_raw.rs"
 
 [[example]]
-name = "tcp_send_file"
-path = "examples/tcp_send_file.rs"
+name = "send_file_raw"
+path = "examples/send_file_raw.rs"

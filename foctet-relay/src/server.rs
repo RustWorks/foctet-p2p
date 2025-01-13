@@ -1,4 +1,5 @@
-use foctet::{core::{frame::{Frame, FrameType, Payload}, node::{NodeId, NodePair}}, net::{config::TransportProtocol, connection::{FoctetStream, NetworkStream}, endpoint::{Endpoint, EndpointHandle, Listener}}};
+use foctet::{core::{frame::{Frame, FrameType, Payload}, node::{NodeId, NodePair}}, net::{config::TransportProtocol, endpoint::{Endpoint, EndpointHandle, Listener}}};
+use foctet::net::transport::stream::{FoctetStream, NetworkStream};
 use tokio::sync::mpsc;
 use tokio_util::{sync::CancellationToken, task::AbortOnDropHandle};
 use anyhow::Result;
