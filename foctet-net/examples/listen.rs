@@ -5,7 +5,7 @@ use tracing_subscriber::FmtSubscriber;
 use clap::Parser;
 use anyhow::Result;
 
-use foctet_net::{config::TransportProtocol, transport::stream::{FoctetStream, NetworkStream}, endpoint::Endpoint};
+use foctet_net::{protocol::TransportProtocol, transport::stream::{FoctetStream, NetworkStream}, endpoint::Endpoint};
 
 /// Command line arguments for the file sender.
 #[derive(Parser, Debug)]
@@ -95,6 +95,8 @@ async fn main() -> Result<()> {
 
     // Create a new server endpoint
     let mut endpoint = Endpoint::builder()
+        .with_quic()
+        .with_tcp()
         .with_node_addr(node_addr)
         .with_server_addr(args.server_addr)
         .with_subject_alt_name(args.server_name)

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::config::EndpointConfig;
-use crate::config::TransportProtocol;
+use crate::protocol::TransportProtocol;
 use crate::transport::quic::connection::{QuicConnection, QuicSocket};
 use crate::transport::tcp::connection::TcpSocket;
 use crate::transport::tcp::stream::TlsTcpStream;
@@ -75,6 +75,30 @@ impl EndpointBuilder {
     /// Set the transport protocol for the endpoint.
     pub fn with_protocol(mut self, protocol: TransportProtocol) -> Self {
         self.config = self.config.with_protocol(protocol);
+        self
+    }
+
+    /// Add QUIC support.
+    pub fn with_quic(mut self) -> Self {
+        self.config = self.config.with_quic();
+        self
+    }
+
+    /// Add TCP support.
+    pub fn with_tcp(mut self) -> Self {
+        self.config = self.config.with_tcp();
+        self
+    }
+
+    /// Add WebSocket support.
+    pub fn with_websocket(mut self) -> Self {
+        self.config = self.config.with_websocket();
+        self
+    }
+
+    /// Add WebTransport support.
+    pub fn with_webtransport(mut self) -> Self {
+        self.config = self.config.with_webtransport();
         self
     }
 
@@ -264,17 +288,85 @@ impl Endpoint {
         EndpointHandle::new(self.cancellation_token.clone())
     }
     pub async fn connect(&mut self, node_addr: NodeAddr) -> Result<NetworkStream> {
-        match self.config.transport_protocol {
-            TransportProtocol::Quic => self.connect_quic(node_addr).await,
-            TransportProtocol::Tcp => self.connect_tcp(node_addr).await,
-            TransportProtocol::Both => {
+        for protocol in self.config.enabled_protocols() {
+            match protocol {
+                TransportProtocol::Quic => {
+                    match self.connect_quic(node_addr.clone()).await {
+                        Ok(stream) => return Ok(stream),
+                        Err(e) => {
+                            tracing::error!("Failed to connect to the node using QUIC: {:?}", e);
+                        }
+                    }
+                }
+                TransportProtocol::Tcp => {
+                    match self.connect_tcp(node_addr.clone()).await {
+                        Ok(stream) => return Ok(stream),
+                        Err(e) => {
+                            tracing::error!("Failed to connect to the node using TCP: {:?}", e);
+                        }
+                    }
+                }
+                TransportProtocol::WebSocket => {
+                    // TODO: Implement WebSocket
+                    match self.connect_tcp(node_addr.clone()).await {
+                        Ok(stream) => return Ok(stream),
+                        Err(e) => {
+                            tracing::error!("Failed to connect to the node using QUIC: {:?}", e);
+                        }
+                    }
+                }
+                TransportProtocol::WebTransport => {
+                    // TODO: Implement WebTransport
+                    match self.connect_quic(node_addr.clone()).await {
+                        Ok(stream) => return Ok(stream),
+                        Err(e) => {
+                            tracing::error!("Failed to connect to the node using QUIC: {:?}", e);
+                        }
+                    }
+                }
+            }
+        }
+        Err(anyhow!("Failed to connect to the node"))
+    }
+    pub async fn connect_woth_protocol(&mut self, node_addr: NodeAddr, protocol: TransportProtocol) -> Result<NetworkStream> {
+        match protocol {
+            TransportProtocol::Quic => {
                 match self.connect_quic(node_addr.clone()).await {
                     Ok(stream) => return Ok(stream),
                     Err(e) => {
-                        tracing::error!("Failed to connect to the node directly: {:?}", e);
+                        tracing::error!("Failed to connect to the node using QUIC: {:?}", e);
+                        return Err(e);
                     }
                 }
-                self.connect_tcp(node_addr).await
+            }
+            TransportProtocol::Tcp => {
+                match self.connect_tcp(node_addr.clone()).await {
+                    Ok(stream) => return Ok(stream),
+                    Err(e) => {
+                        tracing::error!("Failed to connect to the node using TCP: {:?}", e);
+                        return Err(e);
+                    }
+                }
+            }
+            TransportProtocol::WebSocket => {
+                // TODO: Implement WebSocket
+                match self.connect_tcp(node_addr.clone()).await {
+                    Ok(stream) => return Ok(stream),
+                    Err(e) => {
+                        tracing::error!("Failed to connect to the node using QUIC: {:?}", e);
+                        return Err(e);
+                    }
+                }
+            }
+            TransportProtocol::WebTransport => {
+                // TODO: Implement WebTransport
+                match self.connect_quic(node_addr.clone()).await {
+                    Ok(stream) => return Ok(stream),
+                    Err(e) => {
+                        tracing::error!("Failed to connect to the node using QUIC: {:?}", e);
+                        return Err(e);
+                    }
+                }
             }
         }
     }

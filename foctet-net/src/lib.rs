@@ -4,4 +4,5 @@ pub mod tls;
 pub mod message;
 pub mod config;
 pub mod endpoint;
+pub mod protocol;
 pub mod transport;

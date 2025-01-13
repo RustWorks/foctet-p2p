@@ -8,7 +8,7 @@ use super::quic::stream::{QuicRecvStream, QuicSendStream, QuicStream};
 use std::{net::SocketAddr, path::Path};
 use super::tcp::stream::{TlsTcpStream, TlsTcpSendStream, TlsTcpRecvStream};
 
-use crate::config::TransportProtocol;
+use crate::protocol::TransportProtocol;
 
 #[allow(async_fn_in_trait)]
 pub trait FoctetStream {

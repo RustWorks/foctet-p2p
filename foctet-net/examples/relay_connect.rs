@@ -63,6 +63,8 @@ async fn main() -> Result<()> {
     
     // Create a new endpoint
     let mut endpoint = Endpoint::builder()
+        .with_quic()
+        .with_tcp()
         .with_node_addr(node_addr)
         .with_insecure(args.insecure)
         .with_server_addr(dummy_server_addr)

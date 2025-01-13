@@ -4,7 +4,7 @@ use clap::Parser;
 use anyhow::Result;
 use foctet_core::frame::{Frame, FrameType, Payload};
 use foctet_core::node::{NodeAddr, NodeId};
-use foctet_net::config::TransportProtocol;
+use foctet_net::protocol::TransportProtocol;
 use foctet_net::{transport::stream::FoctetStream, endpoint::Endpoint};
 use tokio::sync::mpsc;
 use tracing::Level;
@@ -29,12 +29,12 @@ struct Args {
         help = "Include loopback address in the list of target socket addresses."
     )]
     include_loopback: bool,
-    /// Transport protocol to use. Default is both QUIC and TCP.
+    /// Transport protocol to use. Default is QUIC.
     #[arg(
         short = 'p',
         long = "protocol",
-        help = "Transport protocol to use. Default is both QUIC and TCP.",
-        default_value = "both"
+        help = "Transport protocol to use. Default is QUIC.",
+        default_value = "quic"
     )]
     protocol: String,
 }

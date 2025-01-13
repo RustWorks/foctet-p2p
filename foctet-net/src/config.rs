@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::time::Duration;
 use std::path::PathBuf;
@@ -12,35 +13,8 @@ use foctet_core::default::{
     MIN_READ_BUFFER_SIZE, MIN_WRITE_BUFFER_SIZE,
 };
 use crate::device;
+use crate::protocol::TransportProtocol;
 use crate::tls::{TlsClientConfig, TlsClientConfigBuilder, TlsServerConfig, TlsServerConfigBuilder};
-
-/// The type of socket and transport protocol.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TransportProtocol {
-    /// Both QUIC and TCP (default)
-    Both,
-    /// QUIC socket
-    Quic,
-    /// TCP socket
-    Tcp,
-}
-
-impl Default for TransportProtocol {
-    fn default() -> Self {
-        TransportProtocol::Both
-    }
-}
-
-impl TransportProtocol {
-    /// Converts a string to a transport protocol.
-    pub fn from_str(protocol: &str) -> Self {
-        match protocol.to_lowercase().as_str() {
-            "quic" => TransportProtocol::Quic,
-            "tcp" => TransportProtocol::Tcp,
-            _ => TransportProtocol::Both,
-        }
-    }
-}
 
 /// The configuration for the socket.
 #[derive(Debug, Clone)]
@@ -48,7 +22,7 @@ pub struct EndpointConfig {
     pub bind_addr: SocketAddr,
     pub default_server_addr: SocketAddr,
     pub server_addresses: BTreeSet<SocketAddr>,
-    pub transport_protocol: TransportProtocol,
+    pub transport_protocols: HashSet<TransportProtocol>,
     pub connection_timeout: Duration,
     pub read_timeout: Duration,
     pub write_timeout: Duration,
@@ -69,7 +43,7 @@ impl EndpointConfig {
             bind_addr: DEFAULT_BIND_V4_ADDR,
             default_server_addr: DEFAULT_SERVER_V4_ADDR,
             server_addresses: BTreeSet::new(),
-            transport_protocol: TransportProtocol::Both,
+            transport_protocols: HashSet::new(),
             connection_timeout: DEFAULT_CONNECTION_TIMEOUT,
             read_timeout: DEFAULT_RECEIVE_TIMEOUT,
             write_timeout: DEFAULT_SEND_TIMEOUT,
@@ -91,7 +65,7 @@ impl EndpointConfig {
             bind_addr: default_bind_addr,
             default_server_addr: DEFAULT_SERVER_V4_ADDR,
             server_addresses: default_server_addrs,
-            transport_protocol: TransportProtocol::Both,
+            transport_protocols: HashSet::new(),
             connection_timeout: DEFAULT_CONNECTION_TIMEOUT,
             read_timeout: DEFAULT_RECEIVE_TIMEOUT,
             write_timeout: DEFAULT_SEND_TIMEOUT,
@@ -133,9 +107,40 @@ impl EndpointConfig {
         self
     }
 
-    pub fn with_protocol(mut self, transport_protocol: TransportProtocol) -> Self {
-        self.transport_protocol = transport_protocol;
+    /// Add a single protocol.
+    pub fn with_protocol(mut self, protocol: TransportProtocol) -> Self {
+        self.transport_protocols.insert(protocol);
         self
+    }
+
+    /// Add QUIC support.
+    pub fn with_quic(self) -> Self {
+        self.with_protocol(TransportProtocol::Quic)
+    }
+
+    /// Add TCP support.
+    pub fn with_tcp(self) -> Self {
+        self.with_protocol(TransportProtocol::Tcp)
+    }
+
+    /// Add WebSocket support.
+    pub fn with_websocket(self) -> Self {
+        self.with_protocol(TransportProtocol::WebSocket)
+    }
+
+    /// Add WebTransport support.
+    pub fn with_webtransport(self) -> Self {
+        self.with_protocol(TransportProtocol::WebTransport)
+    }
+
+    /// Check if a specific protocol is enabled.
+    pub fn has_protocol(&self, protocol: &TransportProtocol) -> bool {
+        self.transport_protocols.contains(protocol)
+    }
+
+    /// Get the list of all enabled protocols.
+    pub fn enabled_protocols(&self) -> Vec<TransportProtocol> {
+        self.transport_protocols.iter().cloned().collect()
     }
 
     pub fn with_connection_timeout(mut self, timeout: Duration) -> Self {

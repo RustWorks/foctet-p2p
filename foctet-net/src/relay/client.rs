@@ -1,6 +1,6 @@
 use anyhow::Result;
 use foctet_core::node::{NodeAddr, NodeId, RelayAddr};
-use crate::{config::{EndpointConfig, TransportProtocol}, transport::{quic::connection::QuicSocket, tcp::connection::TcpSocket}};
+use crate::{config::EndpointConfig, protocol::TransportProtocol, transport::{quic::connection::QuicSocket, tcp::connection::TcpSocket}};
 use crate::transport::stream::{FoctetStream, NetworkStream};
 
 #[derive(Clone)]
@@ -31,18 +31,18 @@ impl RelayClient {
         } else{
             return Err(anyhow::anyhow!("No relay address found"));
         };
-        match self.config.transport_protocol {
-            TransportProtocol::Quic => self.open_control_stream_quic(relay_addr.clone()).await,
-            TransportProtocol::Tcp => self.open_control_stream_tcp(relay_addr.clone()).await,
-            TransportProtocol::Both => {
-                match self.open_control_stream_quic(relay_addr.clone()).await {
-                    Ok(stream) => return Ok(stream),
-                    Err(_) => {
-                        self.open_control_stream_tcp(relay_addr.clone()).await
-                    }
+        for protocol in self.config.enabled_protocols() {
+            match protocol {
+                TransportProtocol::Quic => {
+                    return self.open_control_stream_quic(relay_addr.clone()).await;
                 }
+                TransportProtocol::Tcp => {
+                    return self.open_control_stream_tcp(relay_addr.clone()).await;
+                }
+                _ => {}
             }
         }
+        Err(anyhow::anyhow!("No transport protocol found"))
     }
     pub async fn open_control_stream_quic(&mut self, relay_addr: RelayAddr) -> Result<NetworkStream> {
         let mut conn = self.quic_socket.connect_relay(relay_addr).await?;
@@ -56,17 +56,18 @@ impl RelayClient {
         Ok(NetworkStream::Tcp(stream))
     }
     pub async fn connect(&mut self, dst_node_addr: NodeId, relay_addr: RelayAddr) -> Result<NetworkStream> {
-        match self.config.transport_protocol {
-            TransportProtocol::Quic => self.connect_quic(dst_node_addr, relay_addr).await,
-            TransportProtocol::Tcp => self.connect_tcp(dst_node_addr, relay_addr).await,
-            TransportProtocol::Both => {
-                match self.connect_quic(dst_node_addr.clone(), relay_addr.clone()).await {
-                    Ok(stream) => return Ok(stream),
-                    Err(_) => {}
+        for protocol in self.config.enabled_protocols() {
+            match protocol {
+                TransportProtocol::Quic => {
+                    return self.connect_quic(dst_node_addr, relay_addr).await;
                 }
-                self.connect_tcp(dst_node_addr, relay_addr).await
+                TransportProtocol::Tcp => {
+                    return self.connect_tcp(dst_node_addr, relay_addr).await;
+                }
+                _ => {}
             }
         }
+        Err(anyhow::anyhow!("No transport protocol found"))
     }
     pub async fn connect_quic(&mut self, dst_node_addr: NodeId, relay_addr: RelayAddr) -> Result<NetworkStream> {
         let mut conn = self.quic_socket.connect_relay(relay_addr).await?;

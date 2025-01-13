@@ -1,6 +1,6 @@
 use crate::transport::stream::{FoctetRecvStream, FoctetSendStream, FoctetStream};
 use crate::transport::stream::{RecvStream, SendStream};
-use crate::config::TransportProtocol;
+use crate::protocol::TransportProtocol;
 use anyhow::anyhow;
 use anyhow::Result;
 use foctet_core::error::StreamError;
