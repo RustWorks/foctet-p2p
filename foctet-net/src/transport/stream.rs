@@ -5,9 +5,12 @@ use foctet_core::{
     node::{SessionId, NodeId},
 };
 use super::quic::stream::{QuicRecvStream, QuicSendStream, QuicStream};
-use std::{net::SocketAddr, path::Path};
 use super::tcp::stream::{TlsTcpStream, TlsTcpSendStream, TlsTcpRecvStream};
 
+#[cfg(feature = "web")]
+use super::websocket::stream::{TlsWebSocketStream, WebSocketRecvStream, WebSocketSendStream};
+
+use std::{net::SocketAddr, path::Path};
 use crate::protocol::TransportProtocol;
 
 #[allow(async_fn_in_trait)]
@@ -47,6 +50,22 @@ pub trait FoctetStream {
 
     /// Receive a file over the stream
     async fn receive_file(&mut self, file_path: &Path) -> Result<u64>;
+
+    /// Send a specific range of a file, divided into chunks.
+    /// This method is designed for parallel file transfers.
+    async fn send_file_range(
+        &mut self,
+        file_path: &std::path::Path,
+        offset: u64,
+        length: u64,
+    ) -> Result<OperationId>;
+
+    async fn receive_file_range(
+        &mut self,
+        file_path: &std::path::Path,
+        offset: u64,
+        length: u64,
+    ) -> Result<u64>;
 
     /// Send a file over the stream in framed bytes
     async fn send_file_framed_bytes(&mut self, file_path: &std::path::Path) -> Result<()>;
@@ -127,6 +146,15 @@ pub trait FoctetSendStream {
     /// Send a file over the stream in raw bytes
     async fn send_file_raw_bytes(&mut self, file_path: &Path) -> Result<()>;
 
+    /// Send a specific range of a file, divided into chunks.
+    /// This method is designed for parallel file transfers.
+    async fn send_file_range(
+        &mut self,
+        file_path: &std::path::Path,
+        offset: u64,
+        length: u64,
+    ) -> Result<OperationId>;
+
     /// Gracefully closes the stream.
     async fn close(&mut self) -> Result<()>;
 
@@ -172,6 +200,13 @@ pub trait FoctetRecvStream {
     /// Receive a file over the stream in raw bytes
     async fn receive_file_raw_bytes(&mut self, file_path: &Path) -> Result<u64>;
 
+    async fn receive_file_range(
+        &mut self,
+        file_path: &std::path::Path,
+        offset: u64,
+        length: u64,
+    ) -> Result<u64>;
+
     /// Gracefully closes the stream.
     async fn close(&mut self) -> Result<()>;
 
@@ -195,6 +230,8 @@ pub trait FoctetRecvStream {
 pub enum SendStream {
     Quic(QuicSendStream),
     Tcp(TlsTcpSendStream),
+    #[cfg(feature = "web")]
+    WebSocket(WebSocketSendStream),
 }
 
 impl FoctetSendStream for SendStream {
@@ -203,6 +240,8 @@ impl FoctetSendStream for SendStream {
         match self {
             SendStream::Quic(stream) => stream.session_id(),
             SendStream::Tcp(stream) => stream.session_id(),
+            #[cfg(feature = "web")]
+            SendStream::WebSocket(stream) => stream.session_id(),
         }
     }
 
@@ -211,6 +250,8 @@ impl FoctetSendStream for SendStream {
         match self {
             SendStream::Quic(stream) => stream.stream_id(),
             SendStream::Tcp(stream) => stream.stream_id(),
+            #[cfg(feature = "web")]
+            SendStream::WebSocket(stream) => stream.stream_id(),
         }
     }
 
@@ -219,6 +260,8 @@ impl FoctetSendStream for SendStream {
         match self {
             SendStream::Quic(stream) => stream.operation_id(),
             SendStream::Tcp(stream) => stream.operation_id(),
+            #[cfg(feature = "web")]
+            SendStream::WebSocket(stream) => stream.operation_id(),
         }
     }
 
@@ -227,6 +270,8 @@ impl FoctetSendStream for SendStream {
         match self {
             SendStream::Quic(stream) => stream.send_bytes(bytes).await,
             SendStream::Tcp(stream) => stream.send_bytes(bytes).await,
+            #[cfg(feature = "web")]
+            SendStream::WebSocket(stream) => stream.send_bytes(bytes).await,
         }
     }
 
@@ -235,6 +280,8 @@ impl FoctetSendStream for SendStream {
         match self {
             SendStream::Quic(stream) => stream.send_data(data).await,
             SendStream::Tcp(stream) => stream.send_data(data).await,
+            #[cfg(feature = "web")]
+            SendStream::WebSocket(stream) => stream.send_data(data).await,
         }
     }
 
@@ -243,6 +290,8 @@ impl FoctetSendStream for SendStream {
         match self {
             SendStream::Quic(stream) => stream.send_frame(frame).await,
             SendStream::Tcp(stream) => stream.send_frame(frame).await,
+            #[cfg(feature = "web")]
+            SendStream::WebSocket(stream) => stream.send_frame(frame).await,
         }
     }
 
@@ -251,6 +300,8 @@ impl FoctetSendStream for SendStream {
         match self {
             SendStream::Quic(stream) => stream.send_file(file_path).await,
             SendStream::Tcp(stream) => stream.send_file(file_path).await,
+            #[cfg(feature = "web")]
+            SendStream::WebSocket(stream) => stream.send_file(file_path).await,
         }
     }
 
@@ -259,6 +310,8 @@ impl FoctetSendStream for SendStream {
         match self {
             SendStream::Quic(stream) => stream.send_file_framed_bytes(file_path).await,
             SendStream::Tcp(stream) => stream.send_file_framed_bytes(file_path).await,
+            #[cfg(feature = "web")]
+            SendStream::WebSocket(stream) => stream.send_file_framed_bytes(file_path).await,
         }
     }
 
@@ -267,6 +320,22 @@ impl FoctetSendStream for SendStream {
         match self {
             SendStream::Quic(stream) => stream.send_file_raw_bytes(file_path).await,
             SendStream::Tcp(stream) => stream.send_file_raw_bytes(file_path).await,
+            #[cfg(feature = "web")]
+            SendStream::WebSocket(stream) => stream.send_file_raw_bytes(file_path).await,
+        }
+    }
+
+    async fn send_file_range(
+        &mut self,
+        file_path: &std::path::Path,
+        offset: u64,
+        length: u64,
+    ) -> Result<OperationId> {
+        match self {
+            SendStream::Quic(stream) => stream.send_file_range(file_path, offset, length).await,
+            SendStream::Tcp(stream) => stream.send_file_range(file_path, offset, length).await,
+            #[cfg(feature = "web")]
+            SendStream::WebSocket(stream) => stream.send_file_range(file_path, offset, length).await,
         }
     }
 
@@ -275,6 +344,8 @@ impl FoctetSendStream for SendStream {
         match self {
             SendStream::Quic(stream) => stream.close().await,
             SendStream::Tcp(stream) => stream.close().await,
+            #[cfg(feature = "web")]
+            SendStream::WebSocket(stream) => stream.close().await,
         }
     }
 
@@ -283,6 +354,8 @@ impl FoctetSendStream for SendStream {
         match self {
             SendStream::Quic(stream) => stream.is_closed(),
             SendStream::Tcp(stream) => stream.is_closed(),
+            #[cfg(feature = "web")]
+            SendStream::WebSocket(stream) => stream.is_closed(),
         }
     }
 
@@ -291,6 +364,8 @@ impl FoctetSendStream for SendStream {
         match self {
             SendStream::Quic(stream) => stream.is_relay(),
             SendStream::Tcp(stream) => stream.is_relay(),
+            #[cfg(feature = "web")]
+            SendStream::WebSocket(stream) => stream.is_relay(),
         }
     }
 
@@ -299,6 +374,8 @@ impl FoctetSendStream for SendStream {
         match self {
             SendStream::Quic(stream) => stream.remote_address(),
             SendStream::Tcp(stream) => stream.remote_address(),
+            #[cfg(feature = "web")]
+            SendStream::WebSocket(stream) => stream.remote_address(),
         }
     }
 
@@ -307,6 +384,8 @@ impl FoctetSendStream for SendStream {
         match self {
             SendStream::Quic(stream) => stream.write_buffer_size(),
             SendStream::Tcp(stream) => stream.write_buffer_size(),
+            #[cfg(feature = "web")]
+            SendStream::WebSocket(stream) => stream.write_buffer_size(),
         }
     }
 
@@ -315,6 +394,8 @@ impl FoctetSendStream for SendStream {
         match self {
             SendStream::Quic(stream) => stream.set_write_buffer_size(size),
             SendStream::Tcp(stream) => stream.set_write_buffer_size(size),
+            #[cfg(feature = "web")]
+            SendStream::WebSocket(stream) => stream.set_write_buffer_size(size),
         }
     }
 }
@@ -323,6 +404,8 @@ impl FoctetSendStream for SendStream {
 pub enum RecvStream {
     Quic(QuicRecvStream),
     Tcp(TlsTcpRecvStream),
+    #[cfg(feature = "web")]
+    WebSocket(WebSocketRecvStream),
 }
 
 impl FoctetRecvStream for RecvStream {
@@ -331,6 +414,8 @@ impl FoctetRecvStream for RecvStream {
         match self {
             RecvStream::Quic(stream) => stream.session_id(),
             RecvStream::Tcp(stream) => stream.session_id(),
+            #[cfg(feature = "web")]
+            RecvStream::WebSocket(stream) => stream.session_id(),
         }
     }
 
@@ -339,6 +424,8 @@ impl FoctetRecvStream for RecvStream {
         match self {
             RecvStream::Quic(stream) => stream.stream_id(),
             RecvStream::Tcp(stream) => stream.stream_id(),
+            #[cfg(feature = "web")]
+            RecvStream::WebSocket(stream) => stream.stream_id(),
         }
     }
 
@@ -347,6 +434,8 @@ impl FoctetRecvStream for RecvStream {
         match self {
             RecvStream::Quic(stream) => stream.receive_bytes().await,
             RecvStream::Tcp(stream) => stream.receive_bytes().await,
+            #[cfg(feature = "web")]
+            RecvStream::WebSocket(stream) => stream.receive_bytes().await,
         }
     }
 
@@ -355,6 +444,8 @@ impl FoctetRecvStream for RecvStream {
         match self {
             RecvStream::Quic(stream) => stream.receive_data(buffer).await,
             RecvStream::Tcp(stream) => stream.receive_data(buffer).await,
+            #[cfg(feature = "web")]
+            RecvStream::WebSocket(stream) => stream.receive_data(buffer).await,
         }
     }
 
@@ -363,6 +454,8 @@ impl FoctetRecvStream for RecvStream {
         match self {
             RecvStream::Quic(stream) => stream.receive_frame().await,
             RecvStream::Tcp(stream) => stream.receive_frame().await,
+            #[cfg(feature = "web")]
+            RecvStream::WebSocket(stream) => stream.receive_frame().await,
         }
     }
 
@@ -371,6 +464,8 @@ impl FoctetRecvStream for RecvStream {
         match self {
             RecvStream::Quic(stream) => stream.receive_file(file_path).await,
             RecvStream::Tcp(stream) => stream.receive_file(file_path).await,
+            #[cfg(feature = "web")]
+            RecvStream::WebSocket(stream) => stream.receive_file(file_path).await,
         }
     }
 
@@ -379,6 +474,8 @@ impl FoctetRecvStream for RecvStream {
         match self {
             RecvStream::Quic(stream) => stream.receive_file_framed_bytes(file_path).await,
             RecvStream::Tcp(stream) => stream.receive_file_framed_bytes(file_path).await,
+            #[cfg(feature = "web")]
+            RecvStream::WebSocket(stream) => stream.receive_file_framed_bytes(file_path).await,
         }
     }
 
@@ -387,6 +484,22 @@ impl FoctetRecvStream for RecvStream {
         match self {
             RecvStream::Quic(stream) => stream.receive_file_raw_bytes(file_path).await,
             RecvStream::Tcp(stream) => stream.receive_file_raw_bytes(file_path).await,
+            #[cfg(feature = "web")]
+            RecvStream::WebSocket(stream) => stream.receive_file_raw_bytes(file_path).await,
+        }
+    }
+
+    async fn receive_file_range(
+        &mut self,
+        file_path: &std::path::Path,
+        offset: u64,
+        length: u64,
+    ) -> Result<u64> {
+        match self {
+            RecvStream::Quic(stream) => stream.receive_file_range(file_path, offset, length).await,
+            RecvStream::Tcp(stream) => stream.receive_file_range(file_path, offset, length).await,
+            #[cfg(feature = "web")]
+            RecvStream::WebSocket(stream) => stream.receive_file_range(file_path, offset, length).await,
         }
     }
 
@@ -395,6 +508,8 @@ impl FoctetRecvStream for RecvStream {
         match self {
             RecvStream::Quic(stream) => stream.close().await,
             RecvStream::Tcp(stream) => stream.close().await,
+            #[cfg(feature = "web")]
+            RecvStream::WebSocket(stream) => stream.close().await,
         }
     }
 
@@ -403,6 +518,8 @@ impl FoctetRecvStream for RecvStream {
         match self {
             RecvStream::Quic(stream) => stream.is_closed(),
             RecvStream::Tcp(stream) => stream.is_closed(),
+            #[cfg(feature = "web")]
+            RecvStream::WebSocket(stream) => stream.is_closed(),
         }
     }
 
@@ -411,6 +528,8 @@ impl FoctetRecvStream for RecvStream {
         match self {
             RecvStream::Quic(stream) => stream.is_relay(),
             RecvStream::Tcp(stream) => stream.is_relay(),
+            #[cfg(feature = "web")]
+            RecvStream::WebSocket(stream) => stream.is_relay(),
         }
     }
 
@@ -419,6 +538,8 @@ impl FoctetRecvStream for RecvStream {
         match self {
             RecvStream::Quic(stream) => stream.remote_address(),
             RecvStream::Tcp(stream) => stream.remote_address(),
+            #[cfg(feature = "web")]
+            RecvStream::WebSocket(stream) => stream.remote_address(),
         }
     }
 
@@ -427,6 +548,8 @@ impl FoctetRecvStream for RecvStream {
         match self {
             RecvStream::Quic(stream) => stream.read_buffer_size(),
             RecvStream::Tcp(stream) => stream.read_buffer_size(),
+            #[cfg(feature = "web")]
+            RecvStream::WebSocket(stream) => stream.read_buffer_size(),
         }
     }
 
@@ -435,6 +558,8 @@ impl FoctetRecvStream for RecvStream {
         match self {
             RecvStream::Quic(stream) => stream.set_read_buffer_size(size),
             RecvStream::Tcp(stream) => stream.set_read_buffer_size(size),
+            #[cfg(feature = "web")]
+            RecvStream::WebSocket(stream) => stream.set_read_buffer_size(size),
         }
     }
 
@@ -444,6 +569,8 @@ impl FoctetRecvStream for RecvStream {
 pub enum NetworkStream {
     Quic(QuicStream),
     Tcp(TlsTcpStream),
+    #[cfg(feature = "web")]
+    WebSocket(TlsWebSocketStream),
 }
 
 #[allow(async_fn_in_trait)]
@@ -452,12 +579,16 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.session_id(),
             NetworkStream::Tcp(stream) => stream.session_id(),
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.session_id(),
         }
     }
     fn stream_id(&self) -> StreamId {
         match self {
             NetworkStream::Quic(stream) => stream.stream_id(),
             NetworkStream::Tcp(stream) => stream.stream_id(),
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.stream_id(),
         }
     }
 
@@ -465,6 +596,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.operation_id(),
             NetworkStream::Tcp(stream) => stream.operation_id(),
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.operation_id(),
         }
     }
 
@@ -472,6 +605,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.handshake(dst_node_id, data).await,
             NetworkStream::Tcp(stream) => stream.handshake(dst_node_id, data).await,
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.handshake(dst_node_id, data).await,
         }
     }
 
@@ -479,6 +614,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.send_bytes(bytes).await,
             NetworkStream::Tcp(stream) => stream.send_bytes(bytes).await,
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.send_bytes(bytes).await,
         }
     }
 
@@ -486,6 +623,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.receive_bytes().await,
             NetworkStream::Tcp(stream) => stream.receive_bytes().await,
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.receive_bytes().await,
         }
     }
 
@@ -493,6 +632,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.send_data(data).await,
             NetworkStream::Tcp(stream) => stream.send_data(data).await,
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.send_data(data).await,
         }
     }
 
@@ -500,6 +641,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.receive_data(buffer).await,
             NetworkStream::Tcp(stream) => stream.receive_data(buffer).await,
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.receive_data(buffer).await,
         }
     }
 
@@ -507,6 +650,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.send_frame(frame).await,
             NetworkStream::Tcp(stream) => stream.send_frame(frame).await,
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.send_frame(frame).await,
         }
     }
 
@@ -514,6 +659,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.receive_frame().await,
             NetworkStream::Tcp(stream) => stream.receive_frame().await,
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.receive_frame().await,
         }
     }
 
@@ -521,6 +668,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.send_file(file_path).await,
             NetworkStream::Tcp(stream) => stream.send_file(file_path).await,
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.send_file(file_path).await,
         }
     }
 
@@ -528,6 +677,36 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.receive_file(file_path).await,
             NetworkStream::Tcp(stream) => stream.receive_file(file_path).await,
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.receive_file(file_path).await,
+        }
+    }
+
+    async fn send_file_range(
+        &mut self,
+        file_path: &std::path::Path,
+        offset: u64,
+        length: u64,
+    ) -> Result<OperationId> {
+        match self {
+            NetworkStream::Quic(stream) => stream.send_file_range(file_path, offset, length).await,
+            NetworkStream::Tcp(stream) => stream.send_file_range(file_path, offset, length).await,
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.send_file_range(file_path, offset, length).await,
+        }
+    }
+
+    async fn receive_file_range(
+        &mut self,
+        file_path: &std::path::Path,
+        offset: u64,
+        _length: u64,
+    ) -> Result<u64> {
+        match self {
+            NetworkStream::Quic(stream) => stream.receive_file_range(file_path, offset, _length).await,
+            NetworkStream::Tcp(stream) => stream.receive_file_range(file_path, offset, _length).await,
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.receive_file_range(file_path, offset, _length).await,
         }
     }
 
@@ -535,6 +714,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.send_file_framed_bytes(file_path).await,
             NetworkStream::Tcp(stream) => stream.send_file_framed_bytes(file_path).await,
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.send_file_framed_bytes(file_path).await,
         }
     }
 
@@ -542,6 +723,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.receive_file_framed_bytes(file_path).await,
             NetworkStream::Tcp(stream) => stream.receive_file_framed_bytes(file_path).await,
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.receive_file_framed_bytes(file_path).await,
         }
     }
 
@@ -549,6 +732,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.send_file_raw_bytes(file_path).await,
             NetworkStream::Tcp(stream) => stream.send_file_raw_bytes(file_path).await,
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.send_file_raw_bytes(file_path).await,
         }
     }
 
@@ -556,6 +741,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.receive_file_raw_bytes(file_path).await,
             NetworkStream::Tcp(stream) => stream.receive_file_raw_bytes(file_path).await,
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.receive_file_raw_bytes(file_path).await,
         }
     }
 
@@ -563,6 +750,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.close().await,
             NetworkStream::Tcp(stream) => stream.close().await,
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.close().await,
         }
     }
 
@@ -570,6 +759,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.established(),
             NetworkStream::Tcp(stream) => stream.established(),
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.established(),
         }
     }
 
@@ -577,6 +768,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.is_closed(),
             NetworkStream::Tcp(stream) => stream.is_closed(),
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.is_closed(),
         }
     }
 
@@ -584,6 +777,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.is_relay(),
             NetworkStream::Tcp(stream) => stream.is_relay(),
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.is_relay(),
         }
     }
 
@@ -591,6 +786,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.remote_address(),
             NetworkStream::Tcp(stream) => stream.remote_address(),
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.remote_address(),
         }
     }
 
@@ -598,6 +795,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.transport_protocol(),
             NetworkStream::Tcp(stream) => stream.transport_protocol(),
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.transport_protocol(),
         }
     }
 
@@ -605,6 +804,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.write_buffer_size(),
             NetworkStream::Tcp(stream) => stream.write_buffer_size(),
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.write_buffer_size(),
         }
     }
 
@@ -612,6 +813,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.set_write_buffer_size(size),
             NetworkStream::Tcp(stream) => stream.set_write_buffer_size(size),
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.set_write_buffer_size(size),
         }
     }
 
@@ -619,6 +822,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.read_buffer_size(),
             NetworkStream::Tcp(stream) => stream.read_buffer_size(),
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.read_buffer_size(),
         }
     }
 
@@ -626,6 +831,8 @@ impl FoctetStream for NetworkStream {
         match self {
             NetworkStream::Quic(stream) => stream.set_read_buffer_size(size),
             NetworkStream::Tcp(stream) => stream.set_read_buffer_size(size),
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => stream.set_read_buffer_size(size),
         }
     }
 
@@ -636,6 +843,11 @@ impl FoctetStream for NetworkStream {
                 (send, recv)
             }
             NetworkStream::Tcp(stream) => {
+                let (send, recv) = stream.split();
+                (send, recv)
+            }
+            #[cfg(feature = "web")]
+            NetworkStream::WebSocket(stream) => {
                 let (send, recv) = stream.split();
                 (send, recv)
             }
@@ -653,6 +865,12 @@ impl FoctetStream for NetworkStream {
             // Merge TCP streams
             (SendStream::Tcp(send), RecvStream::Tcp(recv)) => {
                 Ok(NetworkStream::Tcp(TlsTcpStream::merge(SendStream::Tcp(send), RecvStream::Tcp(recv))?))
+            }
+
+            // Merge WebSocket streams
+            #[cfg(feature = "web")]
+            (SendStream::WebSocket(send), RecvStream::WebSocket(recv)) => {
+                Ok(NetworkStream::WebSocket(TlsWebSocketStream::merge(SendStream::WebSocket(send), RecvStream::WebSocket(recv))?))
             }
 
             // SendStream and RecvStream types do not match

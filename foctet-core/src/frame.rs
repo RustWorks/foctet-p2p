@@ -300,6 +300,7 @@ pub enum Payload {
     Text(String),
     FileMetadata(FileMetadata),
     Metadata(Metadata),
+    ChunkMetadata(ChunkMetadata),
     ContentId(ContentId),
     Handshake(HandshakeData),
 }
@@ -316,6 +317,10 @@ impl Payload {
                 bincode::serialize(metadata).unwrap_or_default().len()
             }
             Self::Metadata(metadata) => {
+                // Serialize the metadata to bytes and get the size
+                bincode::serialize(metadata).unwrap_or_default().len()
+            }
+            Self::ChunkMetadata(metadata) => {
                 // Serialize the metadata to bytes and get the size
                 bincode::serialize(metadata).unwrap_or_default().len()
             }
@@ -348,6 +353,10 @@ impl Payload {
     /// Create a new metadata payload
     pub fn metadata(metadata: Metadata) -> Self {
         Self::Metadata(metadata)
+    }
+    /// Create a new chunk metadata payload
+    pub fn chunk_metadata(metadata: ChunkMetadata) -> Self {
+        Self::ChunkMetadata(metadata)
     }
     /// Create a new content ID payload
     pub fn content_id(id: ContentId) -> Self {
@@ -382,6 +391,16 @@ pub struct FileMetadata {
     pub modified: UnixTimestamp,
     /// File accessed timestamp in Unix time
     pub accessed: UnixTimestamp,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct ChunkMetadata {
+    pub chunk_id: u64,
+    pub total_chunks: u64,
+    pub chunk_size: usize,
+    pub total_size: usize,
+    pub offset: usize,
+    pub name: String,
 }
 
 /// Represents the metadata of the file or compressed directory

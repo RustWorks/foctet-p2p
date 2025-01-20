@@ -10,7 +10,7 @@ use foctet_core::node::{SessionId, NodeId};
 use futures::sink::SinkExt;
 use quinn::{RecvStream as QuinnRecvStream, SendStream as QuinnSendStream, VarInt};
 use std::net::SocketAddr;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -28,6 +28,30 @@ pub struct QuicSendStream {
     pub is_relay: bool,
     pub next_operation_id: OperationId,
     pub remote_address: SocketAddr,
+}
+
+impl AsyncWrite for QuicSendStream {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        Pin::new(&mut self.get_mut().framed_writer.get_mut()).poll_write(cx, buf).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+    }
+
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.get_mut().framed_writer.get_mut()).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.get_mut().framed_writer.get_mut()).poll_shutdown(cx)
+    }
 }
 
 impl FoctetSendStream for QuicSendStream {
@@ -149,6 +173,60 @@ impl FoctetSendStream for QuicSendStream {
     
         self.framed_writer.flush().await?;
         Ok(())
+    }
+
+    /// Send a specific range of a file, divided into chunks, to the receiver.
+    /// This method is designed for parallel file transfers.
+    async fn send_file_range(
+        &mut self,
+        file_path: &std::path::Path,
+        offset: u64,
+        length: u64,
+    ) -> Result<OperationId> {
+        let mut file = tokio::fs::File::open(file_path).await?;
+        let mut buffer = vec![0u8; self.send_buffer_size];
+
+        // Seek to the specified offset
+        file.seek(tokio::io::SeekFrom::Start(offset)).await?;
+
+        let mut remaining = length;
+        while remaining > 0 {
+            // Determine the size of the next chunk
+            let read_size = std::cmp::min(remaining, self.send_buffer_size as u64) as usize;
+
+            // Read the next chunk from the file
+            let n = file.read(&mut buffer[..read_size]).await?;
+            if n == 0 {
+                break; // EOF
+            }
+
+            // Send the chunk to the receiver
+            let chunk = Payload::FileChunk(buffer[..n].to_vec());
+            let frame: Frame = Frame::builder()
+                .with_fin(false)
+                .with_frame_type(FrameType::FileTransfer)
+                .with_operation_id(self.next_operation_id)
+                .with_payload(chunk)
+                .build();
+            let serialized_message = frame.to_bytes()?;
+            self.framed_writer.send(serialized_message).await?;
+
+            remaining -= n as u64;
+        }
+
+        // Send the last frame with the FIN flag and NO payload
+        let frame: Frame = Frame::builder()
+            .with_fin(true)
+            .with_frame_type(FrameType::FileTransfer)
+            .with_operation_id(self.next_operation_id)
+            .build();
+        let serialized_message = frame.to_bytes()?;
+        self.framed_writer.send(serialized_message).await?;
+
+        self.framed_writer.flush().await?;
+        let operation_id = self.operation_id();
+        self.next_operation_id.increment();
+        Ok(operation_id)
     }
 
     async fn close(&mut self) -> Result<()> {
@@ -284,6 +362,40 @@ impl FoctetRecvStream for QuicRecvStream {
     async fn receive_file(&mut self, file_path: &std::path::Path) -> Result<u64> {
         let mut total_bytes: u64 = 0;
         let mut file = tokio::fs::File::create(file_path).await?;
+        while let Some(chunk) = self.framed_reader.next().await {
+            match chunk {
+                Ok(bytes) => {
+                    let frame = Frame::from_bytes(&bytes)?;
+                    if let Some(Payload::FileChunk(data)) = frame.payload {
+                        file.write_all(&data).await?;
+                        total_bytes += data.len() as u64;
+                    }
+                    if frame.fin {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Error reading from stream: {:?}", e);
+                    break;
+                }
+            }
+        }
+        file.flush().await?;
+        Ok(total_bytes)
+    }
+    async fn receive_file_range(
+        &mut self,
+        file_path: &std::path::Path,
+        offset: u64,
+        _length: u64,
+    ) -> Result<u64> {
+        let mut total_bytes: u64 = 0;
+        let mut file = tokio::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(file_path)
+            .await?;
+        file.seek(tokio::io::SeekFrom::Start(offset)).await?;
         while let Some(chunk) = self.framed_reader.next().await {
             match chunk {
                 Ok(bytes) => {
@@ -626,7 +738,6 @@ impl FoctetStream for QuicStream {
         self.next_operation_id.increment();
         Ok(operation_id)
     }
-
     async fn receive_file(&mut self, file_path: &std::path::Path) -> Result<u64> {
         let mut total_bytes: u64 = 0;
         let mut file = tokio::fs::File::create(file_path).await?;
@@ -651,7 +762,93 @@ impl FoctetStream for QuicStream {
         file.flush().await?;
         Ok(total_bytes)
     }
+    /// Send a specific range of a file, divided into chunks, to the receiver.
+    /// This method is designed for parallel file transfers.
+    async fn send_file_range(
+        &mut self,
+        file_path: &std::path::Path,
+        offset: u64,
+        length: u64,
+    ) -> Result<OperationId> {
+        let mut file = tokio::fs::File::open(file_path).await?;
+        let mut buffer = vec![0u8; self.send_buffer_size];
 
+        // Seek to the specified offset
+        file.seek(tokio::io::SeekFrom::Start(offset)).await?;
+
+        let mut remaining = length;
+        while remaining > 0 {
+            // Determine the size of the next chunk
+            let read_size = std::cmp::min(remaining, self.send_buffer_size as u64) as usize;
+
+            // Read the next chunk from the file
+            let n = file.read(&mut buffer[..read_size]).await?;
+            if n == 0 {
+                break; // EOF
+            }
+
+            // Send the chunk to the receiver
+            let chunk = Payload::FileChunk(buffer[..n].to_vec());
+            let frame: Frame = Frame::builder()
+                .with_fin(false)
+                .with_frame_type(FrameType::FileTransfer)
+                .with_operation_id(self.next_operation_id)
+                .with_payload(chunk)
+                .build();
+            let serialized_message = frame.to_bytes()?;
+            self.framed_writer.send(serialized_message).await?;
+
+            remaining -= n as u64;
+        }
+
+        // Send the last frame with the FIN flag and NO payload
+        let frame: Frame = Frame::builder()
+            .with_fin(true)
+            .with_frame_type(FrameType::FileTransfer)
+            .with_operation_id(self.next_operation_id)
+            .build();
+        let serialized_message = frame.to_bytes()?;
+        self.framed_writer.send(serialized_message).await?;
+
+        self.framed_writer.flush().await?;
+        let operation_id = self.operation_id();
+        self.next_operation_id.increment();
+        Ok(operation_id)
+    }
+    async fn receive_file_range(
+        &mut self,
+        file_path: &std::path::Path,
+        offset: u64,
+        _length: u64,
+    ) -> Result<u64> {
+        let mut total_bytes: u64 = 0;
+        let mut file = tokio::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(file_path)
+            .await?;
+        file.seek(tokio::io::SeekFrom::Start(offset)).await?;
+        while let Some(chunk) = self.framed_reader.next().await {
+            match chunk {
+                Ok(bytes) => {
+                    let frame = Frame::from_bytes(&bytes)?;
+                    if let Some(Payload::FileChunk(data)) = frame.payload {
+                        file.write_all(&data).await?;
+                        total_bytes += data.len() as u64;
+                    }
+                    if frame.fin {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Error reading from stream: {:?}", e);
+                    break;
+                }
+            }
+        }
+        file.flush().await?;
+        Ok(total_bytes)
+    }
     async fn send_file_raw_bytes(&mut self, file_path: &std::path::Path) -> Result<()> {
         let mut file = tokio::fs::File::open(file_path).await?;
         let send_stream = self.framed_writer.get_mut();

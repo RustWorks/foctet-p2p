@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
 
     // Connect to the server
     tracing::info!("Connecting to the server: {:?}", server_node_addr);
-    let mut stream = endpoint.connect(server_node_addr).await?;
+    let mut stream = endpoint.open(server_node_addr).await?;
 
     tracing::info!("Connected to the server: {:?}", stream.remote_address());
 

@@ -6,7 +6,7 @@ use anyhow::Result;
 use foctet_core::content::TransferTicket;
 use foctet_core::frame::{Frame, FrameType, Payload};
 use foctet_core::node::{NodeAddr, NodeId};
-use foctet_net::protocol::TransportProtocol;
+use foctet_net::transport::connection::FoctetConnection;
 use foctet_net::{transport::stream::FoctetStream, endpoint::Endpoint};
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
@@ -34,14 +34,6 @@ struct Args {
         required = true
     )]
     save_path: PathBuf,
-    /// Transport protocol to use. Default is both QUIC and TCP.
-    #[arg(
-        short = 'p',
-        long = "protocol",
-        help = "Transport protocol to use. Default is both QUIC and TCP.",
-        default_value = "both"
-    )]
-    protocol: String,
     /// Include loopback address in the list of target socket addresses.
     #[arg(
         long = "loopback",
@@ -78,7 +70,7 @@ async fn main() -> Result<()> {
     
     // Create a new endpoint
     let mut endpoint = Endpoint::builder()
-        .with_protocol(TransportProtocol::from_str(&args.protocol))
+        .with_quic()
         .with_node_addr(node_addr)
         .with_insecure(args.insecure)
         .with_server_addr(dummy_server_addr)
@@ -90,9 +82,11 @@ async fn main() -> Result<()> {
 
     // Connect to the server
     tracing::info!("Connecting to the server: {:?}", server_node_addr);
-    let mut stream = endpoint.open(server_node_addr).await?;
+    let mut conn = endpoint.connect(server_node_addr).await?;
 
-    tracing::info!("Connected to the server: {:?}", stream.remote_address());
+    tracing::info!("Connected to the server: {:?}", conn.remote_address());
+
+    let mut stream = conn.open_stream().await?;
 
     // Stream
     // 1. Send a content request
@@ -152,12 +146,13 @@ async fn main() -> Result<()> {
     } else {
         args.save_path.clone()
     };
+    let chunk_size = 1024 * 1024 * 20; // 20MB
+    let num_chunks = (metadata.size + chunk_size as usize - 1) / chunk_size as usize; // ceil division
     tracing::info!("Receiving file content...");
     let start_time = std::time::Instant::now();
-    match stream.receive_file_raw_bytes(&save_path).await {
-        Ok(total_bytes) => {
+    match conn.receive_file_parallel(&save_path, num_chunks, metadata.size).await {
+        Ok(_) => {
             tracing::info!("File content received.");
-            tracing::info!("Total bytes received: {}", total_bytes);
             tracing::info!("File saved to: {:?}", save_path);
             let elapsed = start_time.elapsed();
             tracing::info!("Elapsed time: {:?}", elapsed);

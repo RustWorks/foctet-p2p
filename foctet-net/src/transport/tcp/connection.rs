@@ -1,4 +1,5 @@
 use crate::config::EndpointConfig;
+use crate::protocol::TransportProtocol;
 use anyhow::anyhow;
 use anyhow::Result;
 use foctet_core::frame::OperationId;
@@ -12,9 +13,70 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
 use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
+use foctet_core::state::ConnectionState;
 use crate::transport::filter;
 use crate::transport::priority;
+use super::stream::TlsTcpRecvStream;
+use super::stream::TlsTcpSendStream;
 use super::stream::TlsTcpStream;
+
+#[derive(Debug)]
+pub struct TlsTcpConnection {
+    pub node_id: NodeId,
+    pub session_id: SessionId,
+    /// The TLS TCP connection
+    pub connection: TlsTcpStream,
+    pub state: ConnectionState,
+    pub is_relay: bool,
+    pub send_buffer_size: usize,
+    pub receive_buffer_size: usize,
+    pub next_stream_id: StreamId,
+}
+
+impl TlsTcpConnection {
+    pub async fn open_stream(&mut self) -> Result<TlsTcpStream> {
+        return Err(anyhow!("Not implemented"));
+    }
+    pub async fn accept_stream(&mut self) -> Result<TlsTcpStream> {
+        return Err(anyhow!("Not implemented"));
+    }
+    pub async fn open_uni_stream(&mut self) -> Result<TlsTcpSendStream> {
+        return Err(anyhow!("Not implemented"));
+    }
+    pub async fn accept_uni_stream(&mut self) -> Result<TlsTcpRecvStream> {
+        return Err(anyhow!("Not implemented"));
+    }
+    pub async fn close(&mut self) -> Result<()> {
+        return Err(anyhow!("Not implemented"));
+    }
+    pub async fn send_file_parallel(
+        &mut self,
+        _file_path: &std::path::Path,
+        _chunk_size: usize,
+    ) -> Result<()> {
+        return Err(anyhow!("Not implemented"));
+    }
+    pub async fn receive_file_parallel(
+        &mut self,
+        _output_path: &std::path::Path,
+        _expected_chunk_count: usize,
+        _expected_file_size: usize,
+    ) -> Result<()> {
+        return Err(anyhow!("Not implemented"));
+    }
+    pub fn id(&self) -> SessionId {
+        return SessionId::new();
+    }
+    pub fn remote_address(&self) -> SocketAddr {
+        return SocketAddr::new([0, 0, 0, 0].into(), 0);
+    }
+    pub fn is_active(&self) -> bool {
+        return false;
+    }
+    pub fn transport_protocol(&self) -> TransportProtocol {
+        TransportProtocol::Tcp
+    }
+}
 
 #[derive(Clone)]
 pub struct TcpSocket {

@@ -3,9 +3,158 @@ use foctet_core::{
     frame::StreamId,
     node::{SessionId, NodeAddr, NodeId},
 };
-use super::{quic::connection::QuicConnection, stream::{FoctetRecvStream, FoctetSendStream, FoctetStream, NetworkStream, RecvStream, SendStream}};
+use crate::protocol::TransportProtocol;
+
+use super::{quic::connection::QuicConnection, stream::{FoctetRecvStream, FoctetSendStream, FoctetStream, NetworkStream, RecvStream, SendStream}, tcp::connection::TlsTcpConnection};
 use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Instant};
 use tokio::sync::{Mutex, RwLock};
+
+#[allow(async_fn_in_trait)]
+pub trait FoctetConnection {
+    async fn open_stream(&mut self) -> Result<NetworkStream>;
+    async fn accept_stream(&mut self) -> Result<NetworkStream>;
+    async fn open_uni_stream(&mut self) -> Result<SendStream>;
+    async fn accept_uni_stream(&mut self) -> Result<RecvStream>;
+    async fn send_file_parallel(
+        &mut self,
+        file_path: &std::path::Path,
+        chunk_size: usize,
+    ) -> Result<()>;
+    async fn receive_file_parallel(
+        &mut self,
+        output_path: &std::path::Path,
+        chunk_size: usize,
+        expected_chunk_count: usize,
+    ) -> Result<()>;
+    async fn close(&mut self) -> Result<()>;
+    fn id(&self) -> SessionId;
+    fn remote_address(&self) -> SocketAddr;
+    fn is_active(&self) -> bool;
+    fn transport_protocol(&self) -> TransportProtocol;
+}
+
+pub enum Connection {
+    Quic(QuicConnection),
+    Tcp(TlsTcpConnection),
+}
+
+#[allow(async_fn_in_trait)]
+impl FoctetConnection for Connection {
+    async fn open_stream(&mut self) -> Result<NetworkStream> {
+        match self {
+            Connection::Quic(quic_connection) => {
+                let stream = quic_connection.open_stream().await?;
+                Ok(NetworkStream::Quic(stream))
+            },
+            Connection::Tcp(tls_tcp_connection) => {
+                let stream = tls_tcp_connection.open_stream().await?;
+                Ok(NetworkStream::Tcp(stream))
+            }
+        }
+    }
+    async fn accept_stream(&mut self) -> Result<NetworkStream> {
+        match self {
+            Connection::Quic(quic_connection) => {
+                let stream = quic_connection.accept_stream().await?;
+                Ok(NetworkStream::Quic(stream))
+            },
+            Connection::Tcp(tls_tcp_connection) => {
+                let stream = tls_tcp_connection.accept_stream().await?;
+                Ok(NetworkStream::Tcp(stream))
+            }
+        }
+    }
+    async fn open_uni_stream(&mut self) -> Result<SendStream> {
+        match self {
+            Connection::Quic(quic_connection) => {
+                let stream = quic_connection.open_uni_stream().await?;
+                Ok(SendStream::Quic(stream))
+            },
+            Connection::Tcp(tls_tcp_connection) => {
+                let stream = tls_tcp_connection.open_uni_stream().await?;
+                Ok(SendStream::Tcp(stream))
+            }
+        }
+    }
+    async fn accept_uni_stream(&mut self) -> Result<RecvStream> {
+        match self {
+            Connection::Quic(quic_connection) => {
+                let stream = quic_connection.accept_uni_stream().await?;
+                Ok(RecvStream::Quic(stream))
+            },
+            Connection::Tcp(tls_tcp_connection) => {
+                let stream = tls_tcp_connection.accept_uni_stream().await?;
+                Ok(RecvStream::Tcp(stream))
+            }
+        }
+    }
+    async fn send_file_parallel(
+        &mut self,
+        file_path: &std::path::Path,
+        chunk_size: usize,
+    ) -> Result<()> {
+        match self {
+            Connection::Quic(quic_connection) => {
+                quic_connection.send_file_parallel(file_path, chunk_size).await?;
+            },
+            Connection::Tcp(tls_tcp_connection) => {
+                tls_tcp_connection.send_file_parallel(file_path, chunk_size).await?;
+            }
+        }
+        Ok(())
+    }
+    async fn receive_file_parallel(
+        &mut self,
+        output_path: &std::path::Path,
+        expected_chunk_count: usize,
+        expected_file_size: usize,
+    ) -> Result<()> {
+        match self {
+            Connection::Quic(quic_connection) => {
+                quic_connection.receive_file_parallel(output_path, expected_chunk_count, expected_file_size).await?;
+            },
+            Connection::Tcp(tls_tcp_connection) => {
+                tls_tcp_connection.receive_file_parallel(output_path, expected_chunk_count, expected_file_size).await?;
+            }
+        }
+        Ok(())
+    }
+    async fn close(&mut self) -> Result<()> {
+        match self {
+            Connection::Quic(quic_connection) => {
+                quic_connection.close().await?;
+            },
+            Connection::Tcp(tls_tcp_connection) => {
+                tls_tcp_connection.close().await?;
+            }
+        }
+        Ok(())
+    }
+    fn id(&self) -> SessionId {
+        match self {
+            Connection::Quic(quic_connection) => quic_connection.id(),
+            Connection::Tcp(tls_tcp_connection) => tls_tcp_connection.id(),
+        }
+    }
+    fn remote_address(&self) -> SocketAddr {
+        match self {
+            Connection::Quic(quic_connection) => quic_connection.remote_address(),
+            Connection::Tcp(tls_tcp_connection) => tls_tcp_connection.remote_address(),
+        }
+    }
+    fn is_active(&self) -> bool {
+        match self {
+            Connection::Quic(quic_connection) => quic_connection.is_active(),
+            Connection::Tcp(tls_tcp_connection) => tls_tcp_connection.is_active(),
+        }
+    }
+    fn transport_protocol(&self) -> TransportProtocol {
+        match self {
+            Connection::Quic(quic_connection) => quic_connection.transport_protocol(),
+            Connection::Tcp(tls_tcp_connection) => tls_tcp_connection.transport_protocol(),
+        }
+    }
+}
 
 /// Represents the type of connection used.
 #[derive(Debug, Clone, PartialEq, Eq)]
